@@ -1,0 +1,41 @@
+# Razer DeathAdder Elite (wired mouse)
+# source: OpenRazer daemon hardware/mouse.py class `RazerDeathAdderElite`
+#   USB_VID = 0x1532, USB_PID = 0x005C, DPI_MAX = 16000, HAS_MATRIX = True,
+#   MATRIX_DIMS = [1, 2]. METHODS confirm lighting (set_logo_static/spectrum/
+#   none/reactive/breath_random/breath_single/breath_dual and the matching
+#   set_scroll_* set), DPI (get_dpi_xy/set_dpi_xy), and polling rate
+#   (get_poll_rate/set_poll_rate). No battery methods -> wired-only device.
+# source: transaction_id 0x3F — OpenRazer driver/razermouse_driver.c switch
+#   tables: razer_attr_read_firmware_version / read_device_serial /
+#   read_poll_rate / write_dpi all set `request.transaction_id.id = 0x3f` for
+#   `case USB_DEVICE_ID_RAZER_DEATHADDER_ELITE`.
+# source: wait 600 µs — Phase 0 timing table (wired mice default); no
+#   device-specific override found in razermouse_driver.c.
+# source: dpi_min 100 — protocol-level clamp floor, razerchromacommon.c
+#   `razer_chroma_misc_set_dpi_xy()` (`clamp(dpi_x/y, 100, 45000)`), not a
+#   device-specific value (daemon mouse.py only publishes DPI_MAX per device).
+# source: LED ids logo 0x04 / scroll 0x01 — OpenRazer razercommon.h.
+# Tested on real hardware (connected via USB on the maintainer's machine).
+
+name = "Razer DeathAdder Elite"
+usb_pid = "0x005C"
+device_type = "mouse"
+transaction_id = "0x3f"
+wait_us = 600
+dpi_min = 100
+dpi_max = 16000
+matrix_dims = [1, 2]
+
+[capabilities]
+lighting = true
+dpi = true
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "logo"
+id = 0x04
+
+[[led_regions]]
+name = "scroll"
+id = 0x01
