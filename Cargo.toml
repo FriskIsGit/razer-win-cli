@@ -1,0 +1,22 @@
+[package]
+name = "opsrzr-proto"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0-only"
+description = "CLI prototype for opsrzr — settings control over USB HID for Razer devices"
+
+[dependencies]
+razer-hid = { path = "crates/razer-hid" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Platform-specific HID backend (same as razer-hid).
+[target.'cfg(target_os = "windows")'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["linux-native"] }
+
+[workspace]
+resolver = "2"
+members = ["crates/razer-hid"]
