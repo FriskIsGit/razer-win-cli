@@ -228,8 +228,9 @@ fn led_id_for(def: &DeviceDef) -> u8 {
 fn auto_detect_pid(api: &HidApi, registry: &Registry) -> Result<u16, String> {
     let mut pids: Vec<u16> = Vec::new();
     for info in api.device_list() {
-        if info.vendor_id() == RAZER_VID && registry.find_by_pid(info.product_id()).is_some() {
-            pids.push(info.product_id());
+        let product_id = info.product_id();
+        if info.vendor_id() == RAZER_VID && registry.find_by_pid(product_id).is_some() {
+            pids.push(product_id);
         }
     }
     pids.sort();
@@ -274,22 +275,25 @@ fn resolve_pid(
 /// Open a device by PID, then put it in driver mode so it accepts config
 /// commands. Best-effort on the mode switch — some devices don't need it.
 fn open_device<'a>(api: &HidApi, registry: &'a Registry, pid: u16) -> Result<(Device, &'a DeviceDef), String> {
-    let def = registry
-        .find_by_pid(pid)
-        .ok_or_else(|| format!("PID {pid:#06x} is not in the device registry"))?;
+    let Some(definition) = registry.find_by_pid(pid) else {
+        return Err(format!("PID {pid:#06x} is not in the device registry"));
+    };
 
-    let device = Device::open(api, pid, def.transaction_id, def.wait_us).map_err(|e| match e {
-        TransportError::DeviceNotFound { .. } | TransportError::NoInterface { .. } => {
-            format!("{} not found. Is it plugged in?", def.name)
-        }
-        other => other.to_string(),
-    })?;
+    let device = match Device::open(api, pid, definition.transaction_id, definition.wait_us) {
+        Ok(d) => d,
+        Err(e) => return Err(match e {
+            TransportError::DeviceNotFound { .. } | TransportError::NoInterface { .. } => {
+                format!("{} not found. Is it plugged in?", definition.name)
+            }
+            other => other.to_string(),
+        })
+    };
 
     // Put the device in driver mode (OpenRazer does this on daemon startup).
     // Without it some devices intermittently reject commands with 0x05.
     let _ = device.set_device_mode(mode::DRIVER);
 
-    Ok((device, def))
+    Ok((device, definition))
 }
 
 /// Retry a device operation up to `max_attempts` times with a delay between
@@ -330,23 +334,20 @@ fn apply_settings(device: &Device, def: &DeviceDef, settings: &DeviceSettings) -
                 Effect::Off => device.set_effect_none(NOSTORE, led),
             }
             .map_err(|e| format!("set lighting effect: {e}"))?;
-            device
-                .set_brightness(NOSTORE, led, l.brightness)
+
+            device.set_brightness(NOSTORE, led, l.brightness)
                 .map_err(|e| format!("set brightness: {e}"))?;
         }
     }
     if def.capabilities.dpi {
         if let Some(d) = settings.dpi {
-            device
-                .set_dpi(VARSTORE, d.x, d.y)
+            device.set_dpi(VARSTORE, d.x, d.y)
                 .map_err(|e| format!("set dpi: {e}"))?;
         }
     }
     if def.capabilities.polling_rate {
         if let Some(hz) = settings.polling_hz {
-            device
-                .set_polling_rate(hz)
-                .map_err(|e| format!("set polling rate: {e}"))?;
+            device.set_polling_rate(hz).map_err(|e| format!("set polling rate: {e}"))?;
         }
     }
     Ok(())
@@ -707,28 +708,28 @@ fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Resul
         None => auto_detect_pid(api, registry)?,
     };
 
-    let def = registry
-        .find_by_pid(pid)
-        .ok_or_else(|| format!("PID {pid:#06x} not in registry"))?;
+    let Some(definition) = registry.find_by_pid(pid) else {
+        return Err(format!("PID {pid:#06x} not in registry"));
+    };
 
     // Validate capabilities
-    if settings.dpi.is_some() && !def.capabilities.dpi {
-        eprintln!("warning: {} does not support DPI; ignoring --dpi", def.name);
+    if settings.dpi.is_some() && !definition.capabilities.dpi {
+        eprintln!("warning: {} does not support DPI; ignoring --dpi", definition.name);
         settings.dpi = None;
     }
-    if settings.lighting.is_some() && !def.capabilities.lighting {
-        eprintln!("warning: {} does not support lighting; ignoring lighting flags", def.name);
+    if settings.lighting.is_some() && !definition.capabilities.lighting {
+        eprintln!("warning: {} does not support lighting; ignoring lighting flags", definition.name);
         settings.lighting = None;
     }
-    if settings.polling_hz.is_some() && !def.capabilities.polling_rate {
-        eprintln!("warning: {} does not support polling rate; ignoring --polling", def.name);
+    if settings.polling_hz.is_some() && !definition.capabilities.polling_rate {
+        eprintln!("warning: {} does not support polling rate; ignoring --polling", definition.name);
         settings.polling_hz = None;
     }
 
     let mut profile = Profile { name: sanitize_name(name)?, ..Default::default() };
     profile.devices.insert(pid, settings);
     save_profile(&profile)?;
-    println!("Saved profile {:?} for {} ({pid:#06x})", profile.name, def.name);
+    println!("Saved profile {:?} for {} ({pid:#06x})", profile.name, definition.name);
     Ok(())
 }
 
