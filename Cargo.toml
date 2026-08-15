@@ -1,22 +1,26 @@
 [package]
-name = "opsrzr-proto"
+name = "razer-win-cli"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-2.0-only"
-description = "CLI prototype for opsrzr — settings control over USB HID for Razer devices"
+description = "CLI prototype for razer - settings control over USB HID for Razer devices"
 
 [dependencies]
 razer-hid = { path = "crates/razer-hid" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Downgrades to maintain compatibility with 2021 edition
+indexmap = "=2.11.4"
+hashbrown = "=0.16.1"
 
 # Platform-specific HID backend (same as razer-hid).
+# Vendored to replace GetOverlappedResultEx with GetOverlappedResult
 [target.'cfg(target_os = "windows")'.dependencies]
-hidapi = { version = "2.6", default-features = false, features = ["windows-native"] }
+hidapi = { path = "crates/hidapi-rs", default-features = false, features = ["windows-native"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-hidapi = { version = "2.6", default-features = false, features = ["linux-native"] }
+hidapi = { path = "crates/hidapi-rs", default-features = false, features = ["linux-native"] }
 
 [workspace]
 resolver = "2"
-members = ["crates/razer-hid"]
+members = ["crates/razer-hid", "crates/hidapi-rs"]

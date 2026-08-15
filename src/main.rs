@@ -1,22 +1,3 @@
-//! opsrzr-proto — a CLI prototype for controlling Razer device settings
-//! (DPI, RGB lighting, polling rate, profiles) directly over USB HID.
-//!
-//! Device definitions are embedded at compile time (including the DeathAdder
-//! Elite from PR #5). The razer-hid crate is vendored unmodified under
-//! crates/razer-hid/.
-//!
-//! The --pid flag is optional: when omitted, the tool auto-detects the single
-//! connected Razer device. Examples:
-//!
-//!   opsrzr-proto list
-//!   opsrzr-proto info
-//!   opsrzr-proto dpi 1600              # auto-detect device
-//!   opsrzr-proto dpi --pid 0x005C 1600 1600
-//!   opsrzr-proto color 255 0 128
-//!   opsrzr-proto effect spectrum
-//!   opsrzr-proto polling 1000
-//!   opsrzr-proto profile save Gaming --dpi 1600 1600 --effect static --rgb 255 0 128
-
 use std::collections::BTreeSet;
 use std::env;
 use std::path::PathBuf;
@@ -309,7 +290,7 @@ fn with_retry<T>(max_attempts: u32, label: &str, mut f: impl FnMut() -> Result<T
                 last_err = e;
                 if attempt + 1 < max_attempts {
                     eprintln!("retrying {label} (attempt {}/{max_attempts}): {last_err}", attempt + 1);
-                    std::thread::sleep(Duration::from_millis(100));
+                    std::thread::sleep(Duration::from_millis(50));
                 }
             }
         }
@@ -551,16 +532,17 @@ fn cmd_effect(
 }
 
 fn cmd_brightness(api: &HidApi, registry: &Registry, pid: u16, value: u8, led: u8) -> Result<(), String> {
-    let (device, def) = open_device(api, registry, pid)?;
-    if !def.capabilities.lighting {
-        return Err(format!("{} does not support lighting", def.name));
+    let (device, definition) = open_device(api, registry, pid)?;
+    if !definition.capabilities.lighting {
+        return Err(format!("{} does not support lighting", definition.name));
     }
     with_retry(3, "set brightness", || {
         device.set_brightness(NOSTORE, led, value).map_err(|e| e.to_string())
     })?;
+    let mouse_name = &definition.name;
+    let percentage = value as u32 * 100 / 255;
     println!(
-        "{}: set brightness {}/255 ({}%) on LED {led:#04x}",
-        def.name, value, value * 100 / 255
+        "{mouse_name}: set brightness {value}/255 ({percentage}%) on LED {led:#04x}",
     );
     Ok(())
 }
@@ -672,6 +654,7 @@ fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Resul
                 let r: u8 = args[i + 1].parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
                 let g: u8 = args[i + 2].parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
                 let b: u8 = args[i + 3].parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
+                // update_lighting_color(&mut settings, [r,g,b]);
                 if settings.lighting.is_none() {
                     settings.lighting = Some(LightingSettings { effect: Effect::Static, color: [r, g, b], brightness: 255 });
                 } else if let Some(ref mut l) = settings.lighting {
@@ -733,6 +716,18 @@ fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Resul
     Ok(())
 }
 
+fn update_lighting_color(settings: &mut DeviceSettings, color: [u8; 3]) {
+    match &mut settings.lighting {
+        Some(lighting) => lighting.color = color,
+        None =>
+            settings.lighting = Some(LightingSettings {
+            effect: Effect::Static,
+            color,
+            brightness: 255,
+        })
+    }
+}
+
 fn cmd_profile_apply(api: &HidApi, registry: &Registry, name: &str) -> Result<(), String> {
     let profile = load_profile(name)?;
     for (pid, settings) in &profile.devices {
@@ -778,10 +773,10 @@ fn cmd_profile_delete(name: &str) -> Result<(), String> {
 
 fn usage() -> &'static str {
     "\
-opsrzr-proto — CLI for Razer device settings over USB HID
+razer-win-cli — CLI for Razer device settings over USB HID
 
 USAGE:
-  opsrzr-proto <command> [args...] [--pid <pid>]
+  razer-win-cli <command> [args...] [--pid <pid>]
 
   --pid <pid>   Optional. Accepts 0x005c, 005C, or 5c.
                 When omitted, auto-detects the single connected Razer device.
@@ -820,14 +815,14 @@ PROFILES:
   profile delete <name>                     Delete a saved profile
 
 EXAMPLES:
-  opsrzr-proto list
-  opsrzr-proto dpi 1600                    # auto-detect, set DPI 1600x1600
-  opsrzr-proto dpi 1600 800 --pid 0x005C   # explicit PID
-  opsrzr-proto color 255 0 128             # pink logo LED
-  opsrzr-proto color 0 255 0 0x01          # green scroll LED
-  opsrzr-proto effect spectrum             # spectrum cycle
-  opsrzr-proto polling 1000
-  opsrzr-proto profile save Gaming --dpi 1600 1600 --effect static --rgb 255 0 128
+  razer-win-cli list
+  razer-win-cli dpi 1600                    # auto-detect, set DPI 1600x1600
+  razer-win-cli dpi 1600 800 --pid 0x005C   # explicit PID
+  razer-win-cli color 255 0 128             # pink logo LED
+  razer-win-cli color 0 255 0 0x01          # green scroll LED
+  razer-win-cli effect spectrum             # spectrum cycle
+  razer-win-cli polling 1000
+  razer-win-cli profile save Gaming --dpi 1600 1600 --effect static --rgb 255 0 128
 
 NOTES:
   <led> is a hex LED id (default: 0x04 logo). Common: 0x01 scroll, 0x04 logo, 0x05 backlight.
@@ -991,7 +986,7 @@ fn run() -> Result<(), String> {
             println!("{}", usage());
             Ok(())
         }
-        other => Err(format!("unknown command {other:?}\n{}", usage())),
+        other => Err(format!("unknown command {other:?}")),
     }
 }
 
