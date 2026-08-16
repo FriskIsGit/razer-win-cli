@@ -838,6 +838,7 @@ NOTES:
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     let Some(cmd) = args.first() else {
+        // TODO: Launch CLI interface if no argument is provided?
         println!("{}", usage());
         return Ok(());
     };
@@ -845,7 +846,10 @@ fn run() -> Result<(), String> {
     let api = HidApi::new().map_err(|e| format!("failed to initialize hidapi: {e}"))?;
     let registry = load_registry();
     let rest = &args[1..]; // args after the command name
+    return perform_command(api, registry, cmd, rest);
+}
 
+fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String]) -> Result<(), String> {
     match cmd.as_str() {
         "list" => {
             cmd_list(&api, &registry);
@@ -862,7 +866,7 @@ fn run() -> Result<(), String> {
         "dpi" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
             let x: u16 = vals
-                .get(0)
+                .first()
                 .ok_or("dpi requires <x>")?
                 .parse()
                 .map_err(|e: std::num::ParseIntError| format!("invalid x: {e}"))?;
@@ -881,7 +885,7 @@ fn run() -> Result<(), String> {
         "dpi-stages" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
             let active: u8 = vals
-                .get(0)
+                .first()
                 .ok_or("dpi-stages requires <active index>")?
                 .parse()
                 .map_err(|e: std::num::ParseIntError| format!("invalid active: {e}"))?;
@@ -893,28 +897,16 @@ fn run() -> Result<(), String> {
         }
         "color" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
-            let r: u8 = vals
-                .get(0)
-                .ok_or("color requires <r>")?
-                .parse()
-                .map_err(|e: std::num::ParseIntError| format!("invalid r: {e}"))?;
-            let g: u8 = vals
-                .get(1)
-                .ok_or("color requires <g>")?
-                .parse()
-                .map_err(|e: std::num::ParseIntError| format!("invalid g: {e}"))?;
-            let b: u8 = vals
-                .get(2)
-                .ok_or("color requires <b>")?
-                .parse()
-                .map_err(|e: std::num::ParseIntError| format!("invalid b: {e}"))?;
+            let r = parse_rgb_component(&vals, 0, "r")?;
+            let g = parse_rgb_component(&vals, 1, "g")?;
+            let b = parse_rgb_component(&vals, 2, "b")?;
             let led = parse_led(vals.get(3).map(|x| x.as_str()))?;
             cmd_color(&api, &registry, pid, [r, g, b], led)
         }
         "effect" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
             let effect = Effect::parse(
-                vals.get(0)
+                vals.first()
                     .ok_or("effect requires <static|breathing|spectrum|wave|reactive|none>")?,
             )?;
             let led = parse_led(vals.get(1).map(|x| x.as_str()))?;
@@ -931,7 +923,7 @@ fn run() -> Result<(), String> {
         "brightness" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
             let value: u8 = vals
-                .get(0)
+                .first()
                 .ok_or("brightness requires <0-255>")?
                 .parse()
                 .map_err(|e: std::num::ParseIntError| format!("invalid brightness: {e}"))?;
@@ -940,13 +932,13 @@ fn run() -> Result<(), String> {
         }
         "getbrightness" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
-            let led = parse_led(vals.get(0).map(|x| x.as_str()))?;
+            let led = parse_led(vals.first().map(|x| x.as_str()))?;
             cmd_get_brightness(&api, &registry, pid, led)
         }
         "polling" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
             let hz: u16 = vals
-                .get(0)
+                .first()
                 .ok_or("polling requires <hz>")?
                 .parse()
                 .map_err(|e: std::num::ParseIntError| format!("invalid hz: {e}"))?;
@@ -990,6 +982,14 @@ fn run() -> Result<(), String> {
         }
         other => Err(format!("unknown command {other:?}")),
     }
+}
+
+fn parse_rgb_component(vals: &[String], index: usize, name: &str) -> Result<u8, String> {
+    let str = match vals.get(index) {
+        Some(s) => s,
+        None => return Err(format!("color requires <{name}>")),
+    };
+    str.parse::<u8>().map_err(|e| format!("invalid {name}: {e}"))
 }
 
 fn main() -> ExitCode {
