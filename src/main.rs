@@ -91,12 +91,14 @@ impl Default for Profile {
 // Profile store
 // =========================================================================
 
+const PROFILES_PATH_ENV_VAR: &str = "RAZER_CLI_PROFILES_DIR";
+
 fn profiles_dir() -> PathBuf {
-    if let Ok(dir) = env::var("OPSRZR_PROFILES_DIR") {
+    if let Ok(dir) = env::var(PROFILES_PATH_ENV_VAR) {
         return PathBuf::from(dir);
     }
     if let Some(home) = env::var_os("HOME") {
-        return PathBuf::from(home).join(".config").join("opsrzr-proto").join("profiles");
+        return PathBuf::from(home).join(".config").join("razer-win-cli").join("profiles");
     }
     PathBuf::from("profiles")
 }
