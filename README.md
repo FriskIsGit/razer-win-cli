@@ -11,7 +11,7 @@ Prerequisite: [Rust](https://www.rust-lang.org/tools/install)
 On Windows, check your active toolchain with `rustup toolchain list`.
 
 ### MSVC targets
-If you're using the MSVC toolchain, install Microsoft Build Tools or, 
+If you're using the MSVC toolchain, install [Microsoft Build Tools](https://aka.ms/vs/stable/vs_BuildTools.exe) or, 
 for a lighter install, use: https://github.com/Data-Oriented-House/PortableBuildTools
 
 PortableBuildTools includes its own setup scripts and a number of environment paths.
