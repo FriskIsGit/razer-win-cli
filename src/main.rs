@@ -47,7 +47,6 @@ impl Effect {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct LightingSettings {
     effect: Effect,
     color: Rgb,
@@ -55,14 +54,12 @@ struct LightingSettings {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct DpiSettings {
     x: u16,
     y: u16,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct DeviceSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     lighting: Option<LightingSettings>,
@@ -72,11 +69,24 @@ struct DeviceSettings {
     polling_hz: Option<u16>,
 }
 
+impl DeviceEntry {
+    pub fn new(id: u16, settings: DeviceSettings) -> Self {
+        Self { id, settings }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct DeviceEntry {
+    id: u16,
+    #[serde(default)]
+    settings: DeviceSettings,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Profile {
     name: String,
     #[serde(default)]
-    devices: std::collections::BTreeMap<u16, DeviceSettings>,
+    devices: Vec<DeviceEntry>,
 }
 
 impl Default for Profile {
@@ -723,7 +733,8 @@ fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Resul
     }
 
     let mut profile = Profile { name: sanitize_name(name)?, ..Default::default() };
-    profile.devices.insert(pid, settings);
+    let device_entry = DeviceEntry::new(pid, settings);
+    profile.devices.push(device_entry);
     save_profile(&profile)?;
     println!("Saved profile {:?} for {} ({pid:#06x})", profile.name, definition.name);
     Ok(())
@@ -743,9 +754,10 @@ fn update_lighting_color(settings: &mut DeviceSettings, color: [u8; 3]) {
 
 fn cmd_profile_apply(api: &HidApi, registry: &Registry, name: &str) -> Result<(), String> {
     let profile = load_profile(name)?;
-    for (pid, settings) in &profile.devices {
-        match open_device(api, registry, *pid) {
-            Ok((device, def)) => match apply_settings(&device, def, settings) {
+    for device_entry in &profile.devices {
+        let pid = device_entry.id;
+        match open_device(api, registry, pid) {
+            Ok((device, def)) => match apply_settings(&device, def, &device_entry.settings) {
                 Ok(()) => println!("Applied {:?} to {} ({pid:#06x})", profile.name, def.name),
                 Err(e) => eprintln!("Failed to apply to {pid:#06x}: {e}"),
             },
