@@ -124,7 +124,7 @@ fn get_home_directory() -> Option<OsString> {
     env::var_os("HOME")
 }
 
-fn sanitize_name(name: &str) -> Result<String, String> {
+fn validate_profile_name(name: &str) -> Result<String, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() || trimmed.len() > 64 {
         return Err("profile name must be 1-64 chars".to_string());
@@ -140,13 +140,16 @@ fn sanitize_name(name: &str) -> Result<String, String> {
 }
 
 fn profile_path(name: &str) -> Result<PathBuf, String> {
-    let safe = sanitize_name(name)?;
-    Ok(profiles_dir().join(format!("{safe}.json")))
+    let safe_name = validate_profile_name(name)?;
+    Ok(profiles_dir().join(format!("{safe_name}.json")))
 }
 
 fn save_profile(profile: &Profile) -> Result<(), String> {
     let path = profile_path(&profile.name)?;
-    std::fs::create_dir_all(path.parent().unwrap_or(&profiles_dir())).map_err(|e| e.to_string())?;
+    // TODO: Check if parent logic is correct
+    let profiles_dir = profiles_dir();
+    let profiles_parent = path.parent().unwrap_or(&profiles_dir);
+    std::fs::create_dir_all(profiles_parent).map_err(|e| e.to_string())?;
     let json = serde_json::to_string_pretty(profile).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| format!("write {}: {e}", path.display()))
 }
@@ -240,6 +243,7 @@ fn auto_detect_pid(api: &HidApi, registry: &Registry) -> Result<u16, String> {
     pids.sort();
     pids.dedup();
     match pids.len() {
+        // TODO: no razer device connected is incorrect. It's unsupported when its missing in registry
         0 => Err("no Razer device connected. Use --pid to specify one.".into()),
         1 => Ok(pids[0]),
         _ => {
@@ -732,7 +736,8 @@ fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Resul
         settings.polling_hz = None;
     }
 
-    let mut profile = Profile { name: sanitize_name(name)?, ..Default::default() };
+    let profile_name = validate_profile_name(name)?;
+    let mut profile = Profile { name: profile_name, ..Default::default() };
     let device_entry = DeviceEntry::new(pid, settings);
     profile.devices.push(device_entry);
     save_profile(&profile)?;
