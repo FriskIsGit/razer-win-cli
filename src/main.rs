@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::env;
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
@@ -94,13 +95,23 @@ impl Default for Profile {
 const PROFILES_PATH_ENV_VAR: &str = "RAZER_CLI_PROFILES_DIR";
 
 fn profiles_dir() -> PathBuf {
-    if let Ok(dir) = env::var(PROFILES_PATH_ENV_VAR) {
+    if let Some(dir) = env::var_os(PROFILES_PATH_ENV_VAR) {
         return PathBuf::from(dir);
     }
-    if let Some(home) = env::var_os("HOME") {
-        return PathBuf::from(home).join(".config").join("razer-win-cli").join("profiles");
+    if let Some(home) = get_home_directory() {
+        return PathBuf::from(home).join(".razer-win-cli").join("profiles");
     }
-    PathBuf::from("profiles")
+    return PathBuf::from("profiles")
+}
+
+#[cfg(windows)]
+fn get_home_directory() -> Option<OsString> {
+    env::var_os("USERPROFILE")
+}
+
+#[cfg(not(windows))]
+fn get_home_directory() -> Option<OsString> {
+    env::var_os("HOME")
 }
 
 fn sanitize_name(name: &str) -> Result<String, String> {
@@ -828,7 +839,7 @@ EXAMPLES:
 
 NOTES:
   <led> is a hex LED id (default: 0x04 logo). Common: 0x01 scroll, 0x04 logo, 0x05 backlight.
-  Profiles are stored as JSON in ~/.config/opsrzr-proto/profiles/ (override with OPSRZR_PROFILES_DIR)."
+  Profiles are stored as JSON in ~/.razer-win-cli/profiles/ (override with RAZER_CLI_PROFILES_DIR)."
 }
 
 // =========================================================================

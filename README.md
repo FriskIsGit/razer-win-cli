@@ -104,8 +104,9 @@ PROFILES:
 `<led>` is a hex LED id (default: `0x04` logo). Common: `0x01` scroll, `0x04`
 logo, `0x05` backlight.
 
-Profiles are stored as JSON in `~/.config/razer-win-cli/profiles/` (Linux) or
-`%APPDATA%\razer-win-cli\profiles\` (Windows). Override with `RAZER_CLI_PROFILES_DIR`.
+Profiles are stored as JSON files in `~/.razer-win-cli/profiles/` on Unix 
+and `%USERPROFILE%\.razer-win-cli\profiles\` on Windows.
+You can override the storage location with `RAZER_CLI_PROFILES_DIR` environment variable.
 
 ## Project structure
 
