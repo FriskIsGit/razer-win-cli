@@ -180,3 +180,29 @@ match ids.len() {
     _ => Some("multiple products found"),
 }
 ```
+
+## Avoid replacing a few simple if statements with iterator tricks
+For a small fixed set of booleans, prefer straightforward if pushes over list based processing.
+```rs
+// Avoid
+let features: Vec<&str> = [
+  premium_package.cooling.then_some("cooling"),
+  premium_package.power.then_some("power"),
+  premium_package.warranty.then_some("warranty"),
+  premium_package.battery.then_some("battery"),
+]
+.into_iter()
+.flatten()
+.collect();
+```
+This increases overall code complexity because `flatten()` is doing something less obvious here: 
+it removes `None` from `Option<T>` values, not just nested collections.
+
+```rs
+// Prefer
+let mut features = Vec::new();
+if premium_package.cooling { caps.push("cooling"); }
+if premium_package.power { caps.push("power"); }
+if premium_package.warranty { caps.push("warranty"); }
+if premium_package.battery { caps.push("battery"); }
+```

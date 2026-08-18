@@ -415,26 +415,19 @@ fn cmd_list(api: &HidApi, registry: &Registry) {
     println!("{:-<60}", "");
     for pid in pids {
         match registry.find_by_pid(pid) {
-            Some(def) => {
-                let dev_type = match def.device_type {
+            Some(definition) => {
+                let dev_type = match definition.device_type {
                     razer_hid::DeviceType::Mouse => "mouse",
                     razer_hid::DeviceType::Keyboard => "keyboard",
                 };
-                let caps: Vec<&str> = [
-                    def.capabilities.lighting.then_some("lighting"),
-                    def.capabilities.dpi.then_some("dpi"),
-                    def.capabilities.polling_rate.then_some("polling"),
-                    def.capabilities.battery.then_some("battery"),
-                ]
-                .into_iter()
-                .flatten()
-                .collect();
+
+                let capabilities = get_capabilities(definition);
                 println!(
                     "{:<10}  {:<30}  {} [{}]",
                     format!("{pid:#06x}"),
-                    def.name,
+                    definition.name,
                     dev_type,
-                    caps.join(", "),
+                    capabilities.join(", "),
                 );
             }
             None => println!(
@@ -444,6 +437,16 @@ fn cmd_list(api: &HidApi, registry: &Registry) {
             ),
         }
     }
+}
+
+fn get_capabilities(def: &DeviceDef) -> Vec<&str> {
+    let mut caps = Vec::new();
+    if def.capabilities.lighting { caps.push("lighting"); }
+    if def.capabilities.dpi { caps.push("dpi"); }
+    if def.capabilities.polling_rate { caps.push("polling"); }
+    if def.capabilities.battery { caps.push("battery"); }
+    if def.capabilities.onboard { caps.push("onboard"); }
+    caps
 }
 
 fn cmd_info(api: &HidApi, registry: &Registry, pid: u16) -> Result<(), String> {
