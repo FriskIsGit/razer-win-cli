@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -233,25 +233,11 @@ fn led_id_for(def: &DeviceDef) -> u8 {
 /// Auto-detect the single connected Razer device. Returns an error if zero or
 /// more than one registry-known device is attached.
 fn auto_detect_pid(api: &HidApi, registry: &Registry) -> Result<u16, String> {
-    let mut razer_connected = false;
-    let mut razer_pid: i32 = 0;
-    let mut unique_pids = HashSet::new();
-    for info in api.device_list() {
-        let product_id = info.product_id();
-        if info.vendor_id() != RAZER_VID {
-            continue
-        }
-        razer_connected = true;
-        razer_pid = product_id as i32;
-        if registry.find_by_pid(product_id).is_some() {
-            unique_pids.insert(product_id);
-        }
-    }
-    let pids: Vec<u16> = unique_pids.into_iter().collect();
+    let (pids, razer_pid) = unique_razer_pids(api, registry);
     match pids.len() {
         0 => {
-            if razer_connected {
-                Err(format!("Razer device connected but PID {razer_pid:#06x} is not supported."))
+            if let Some(pid) = razer_pid {
+                Err(format!("Razer device connected but PID {pid:#06x} is not supported."))
             } else {
                 Err("no Razer device connected. See if any HID-compliant mice are visible in device manager".into())
             }
@@ -262,6 +248,25 @@ fn auto_detect_pid(api: &HidApi, registry: &Registry) -> Result<u16, String> {
             Err(format!("multiple Razer devices connected ({list}). Use --pid to select one."))
         }
     }
+}
+
+/// Returns unique supported product IDs and the PID of the last Razer device found.
+/// This PID is included for debugging purposes and may be unsupported.
+fn unique_razer_pids(api: &HidApi, registry: &Registry) -> (Vec<u16>, Option<u16>) {
+    let mut razer_pid = None;
+    let mut unique_pids = HashSet::new();
+    for info in api.device_list() {
+        let product_id = info.product_id();
+        if info.vendor_id() != RAZER_VID {
+            continue
+        }
+        razer_pid = Some(product_id);
+        if registry.find_by_pid(product_id).is_some() {
+            unique_pids.insert(product_id);
+        }
+    }
+    let pids: Vec<u16> = unique_pids.into_iter().collect();
+    (pids, razer_pid)
 }
 
 fn format_pid_list(pids: &Vec<u16>) -> String {
@@ -391,17 +396,15 @@ fn apply_settings(device: &Device, def: &DeviceDef, settings: &DeviceSettings) -
 // =========================================================================
 
 fn cmd_list(api: &HidApi, registry: &Registry) {
-    let mut pids: BTreeSet<u16> = BTreeSet::new();
-    for info in api.device_list() {
-        if info.vendor_id() == RAZER_VID {
-            pids.insert(info.product_id());
-        }
-    }
+    let (pids, razer_pid) = unique_razer_pids(api, registry);
 
     if pids.is_empty() {
-        println!("No Razer devices found (VID {RAZER_VID:#06x}).");
-        println!();
-        println!("Registry devices (not necessarily connected):");
+        if let Some(pid) = razer_pid {
+            println!("Razer device connected but PID {pid:#06x} is not supported.")
+        } else {
+            println!("no Razer device connected. See if any HID-compliant mice are visible in device manager")
+        }
+        println!("\nSupported registry devices:");
         for def in registry.devices() {
             println!("  {:#06x}  {}", def.usb_pid, def.name);
         }
