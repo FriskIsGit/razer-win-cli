@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::env;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -233,25 +233,50 @@ fn led_id_for(def: &DeviceDef) -> u8 {
 /// Auto-detect the single connected Razer device. Returns an error if zero or
 /// more than one registry-known device is attached.
 fn auto_detect_pid(api: &HidApi, registry: &Registry) -> Result<u16, String> {
-    let mut pids: Vec<u16> = Vec::new();
+    let mut razer_connected = false;
+    let mut razer_pid: i32 = 0;
+    let mut unique_pids = HashSet::new();
     for info in api.device_list() {
         let product_id = info.product_id();
-        if info.vendor_id() == RAZER_VID && registry.find_by_pid(product_id).is_some() {
-            pids.push(product_id);
+        if info.vendor_id() != RAZER_VID {
+            continue
+        }
+        razer_connected = true;
+        razer_pid = product_id as i32;
+        if registry.find_by_pid(product_id).is_some() {
+            unique_pids.insert(product_id);
         }
     }
-    pids.sort();
-    pids.dedup();
+    let pids: Vec<u16> = unique_pids.into_iter().collect();
     match pids.len() {
-        // TODO: no razer device connected is incorrect. It's unsupported when its missing in registry
-        0 => Err("no Razer device connected. Use --pid to specify one.".into()),
+        0 => {
+            if razer_connected {
+                Err(format!("Razer device connected but PID {razer_pid:#06x} is not supported."))
+            } else {
+                Err("no Razer device connected. See if any HID-compliant mice are visible in device manager".into())
+            }
+        },
         1 => Ok(pids[0]),
         _ => {
-            let list = pids.iter().map(|p| format!("{p:#06x}")).collect::<Vec<_>>().join(", ");
+            let list = format_pid_list(&pids);
             Err(format!("multiple Razer devices connected ({list}). Use --pid to select one."))
         }
     }
 }
+
+fn format_pid_list(pids: &Vec<u16>) -> String {
+    let mut list = String::new();
+    let mut first = true;
+    for p in pids {
+        if !first {
+            list.push_str(", ");
+        }
+        first = false;
+        list.push_str(&format!("{p:#06x}"));
+    }
+    list
+}
+
 
 /// Extract `--pid <value>` (or `-p <value>`) from the argument list.
 /// Returns (resolved PID, remaining args with --pid removed).

@@ -1,4 +1,4 @@
-# razer-win-cli
+# Razer CLI for Windows
 
 A self-contained CLI for controlling Razer device settings 
 (DPI, RGB lighting, polling rate, profiles) directly over USB HID on Windows. 

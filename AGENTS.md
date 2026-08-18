@@ -14,6 +14,7 @@ Don’t default to hacky workarounds just to force a result.
 5. When asked to verify a code path read the code and analyze instead of executing the program.
 6. Use clean, descriptive, self-explanatory function and variable names (prefer camelCase). Watch out for JSON fields which are usually snake_case.
 7. Prefer native tooling for reading, writing, editing files rather than using `cat` or `sed`.
+8. After completing a bug fix or feature implementation, suggest a concise commit message the user could use.
 
 ## Extract repetitive logic used 3 or more times
 ```rs
@@ -90,10 +91,10 @@ fn update_lighting_color(settings: &mut DeviceSettings, color: [u8; 3]) {
 Code is data. Code should document itself. 
 ```rs
 // Bad - hidden intent, elements are collected just to be transformed again with join.
-let list = pids.iter().map(|p| format!("{p:#06x}")).collect::<Vec<_>>().join(", ");
+let list = pids.iter().map(|p| format!("{p}")).collect::<Vec<_>>().join(", ");
 
 // ✅ Good
-let list = formatList(pids);
+let list = format_list(pids);
 ```
 
 ## Use let-else with Option<T> where appropriate
@@ -142,4 +143,40 @@ let result = num * 15;
 // Good: widen before multiplying
 let num: u8 = 20;
 let result = num as u32 * 15;
+```
+
+## Don’t add complexity if the data structure is wrong.
+Don’t force the idea into an existing structure if that structure is a poor fit; 
+refactor to match the goal instead of layering complexity on top of incompatibility.
+
+```rs
+// Bad: uses Vec + sort + dedup just to count unique IDs
+let mut ids = Vec::new();
+for product in products {
+    ids.push(product.id);
+}
+ids.sort();
+ids.dedup();
+
+match ids.len() {
+    0 => Err("no products found"),
+    1 => Some("only a single product found"),
+    _ => Some("multiple products found"),
+}
+```
+
+```rs
+// Good: use a set when uniqueness is the actual goal
+use std::collections::HashSet;
+
+let mut ids = HashSet::new();
+for product in products {
+    ids.insert(product.id);
+}
+
+match ids.len() {
+    0 => Err("no products found"),
+    1 => Some("only a single product found"),
+    _ => Some("multiple products found"),
+}
 ```
