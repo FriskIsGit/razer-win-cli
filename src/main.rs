@@ -7,7 +7,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use hidapi::HidApi;
-use razer_hid::commands::dpi::DpiStage;
+use razer_hid::commands::dpi::{DpiStage};
 use razer_hid::commands::info::mode;
 use razer_hid::commands::lighting::{led_id, Rgb};
 use razer_hid::commands::{NOSTORE, VARSTORE};
@@ -225,19 +225,29 @@ fn load_registry() -> Registry {
     registry
 }
 
-fn parse_pid(raw: &str) -> Result<u16, String> {
-    let trimmed = raw.trim_start_matches("0x").trim_start_matches("0X");
-    u16::from_str_radix(trimmed, 16).map_err(|e| format!("invalid PID {raw:?}: {e}"))
-}
-
 fn parse_led(raw: Option<&str>) -> Result<u8, String> {
     match raw {
-        Some(r) => {
-            let trimmed = r.trim_start_matches("0x").trim_start_matches("0X");
-            u8::from_str_radix(trimmed, 16).map_err(|e| format!("invalid LED id {r:?}: {e}"))
-        }
+        Some(r) => parse_hex_to_u8(r),
         None => Ok(led_id::LOGO),
     }
+}
+
+fn strip_hex_prefix(raw: &str) -> String {
+    let lowercase = raw.to_lowercase();
+    lowercase.trim_start_matches("0x").to_owned()
+}
+
+
+fn parse_hex_to_u16(raw: &str) -> Result<u16, String> {
+    let trimmed = strip_hex_prefix(raw);
+    u16::from_str_radix(&trimmed, 16)
+        .map_err(|e| format!("invalid hex id {raw:?}: {e}"))
+}
+
+fn parse_hex_to_u8(raw: &str) -> Result<u8, String> {
+    let trimmed = strip_hex_prefix(raw);
+    u8::from_str_radix(&trimmed, 16)
+        .map_err(|e| format!("invalid hex id {raw:?}: {e}"))
 }
 
 fn led_id_for(def: &DeviceDef) -> u8 {
@@ -310,7 +320,7 @@ fn resolve_pid(
     let mut i = 0;
     while i < args.len() {
         if (args[i] == "--pid" || args[i] == "-p") && i + 1 < args.len() {
-            pid = Some(parse_pid(&args[i + 1])?);
+            pid = Some(parse_hex_to_u16(&args[i + 1])?);
             i += 2;
         } else {
             remaining.push(args[i].clone());
@@ -695,7 +705,7 @@ fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Resul
                 if i + 1 >= args.len() {
                     return Err("--pid requires a value".into());
                 }
-                pid = Some(parse_pid(&args[i + 1])?);
+                pid = Some(parse_hex_to_u16(&args[i + 1])?);
                 i += 2;
             }
             "--dpi" => {
@@ -819,11 +829,12 @@ fn cmd_profile_apply(api: &HidApi, registry: &Registry, name: &str) -> Result<()
 
 fn cmd_profile_list() {
     let names = list_profiles();
+    let dir = profiles_dir();
     if names.is_empty() {
-        println!("No saved profiles (stored in {})", profiles_dir().display());
+        println!("No saved profiles (stored in {})", dir.display());
         return;
     }
-    println!("Profiles ({}):", profiles_dir().display());
+    println!("Profiles ({}):", dir.display());
     for name in names {
         println!("  {name}");
     }
@@ -939,17 +950,7 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
         }
         "dpi" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
-            let x: u16 = vals
-                .first()
-                .ok_or("dpi requires <x>")?
-                .parse()
-                .map_err(|e: std::num::ParseIntError| format!("invalid x: {e}"))?;
-            let y: u16 = match vals.get(1) {
-                Some(raw) => raw
-                    .parse()
-                    .map_err(|e: std::num::ParseIntError| format!("invalid y: {e}"))?,
-                None => x,
-            };
+            let (x, y) = parse_dpi(vals)?;
             cmd_dpi(&api, &registry, pid, x, y)
         }
         "getdpi" => {
@@ -1056,6 +1057,20 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
         }
         other => Err(format!("unknown command {other:?}")),
     }
+}
+
+fn parse_dpi(vals: Vec<String>) -> Result<(u16, u16), String> {
+    if vals.is_empty() {
+        return Err("dpi requires <x>".to_string())
+    }
+    let x: u16 = vals[0].parse()
+        .map_err(|e: std::num::ParseIntError| format!("invalid x: {e}"))?;
+    if vals.len() == 1 {
+        return Ok((x, x))
+    }
+    let y: u16 = vals[1].parse()
+        .map_err(|e: std::num::ParseIntError| format!("invalid y: {e}"))?;
+    Ok((x, y))
 }
 
 fn parse_rgb_component(vals: &[String], index: usize, name: &str) -> Result<u8, String> {

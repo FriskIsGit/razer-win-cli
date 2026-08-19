@@ -15,6 +15,7 @@ Don’t default to hacky workarounds just to force a result.
 6. Use clean, descriptive, self-explanatory function and variable names (prefer camelCase). Watch out for JSON fields which are usually snake_case.
 7. Prefer native tooling for reading, writing, editing files rather than using `cat` or `sed`.
 8. After completing a bug fix or feature implementation, suggest a concise commit message the user could use.
+9. Never introduce new dependencies without explicit user approval. If a dependency is required, justify its necessity over standard library solutions.
 
 ## Extract repetitive logic used 3 or more times
 ```rs
@@ -231,4 +232,17 @@ let Some(ext) = path.extension() else {
 if ext != "mp3" {
     continue
 }
+```
+
+## Prefer Robust Step-by-Step Logic Over Functional Conciseness
+```rs
+// Avoid (Overly functional) - harder to debug and read for simple validation
+let x = values.first().ok_or("missing")?.parse::<u16>()
+    .map_err(|e| format!("invalid x: {e}"))?;
+    
+// Preferred (Explicit & Safe)
+if vals.is_empty() {
+    return Err("missing".to_string());
+}
+let x: u16 = values[0].parse().map_err(|e| format!("invalid x: {e}"))?;
 ```
