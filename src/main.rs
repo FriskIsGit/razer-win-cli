@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
+use std::fs::{create_dir_all, read_dir, read_to_string, remove_file, write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
@@ -141,38 +142,51 @@ fn validate_profile_name(name: &str) -> Result<String, String> {
 
 fn profile_path(name: &str) -> Result<PathBuf, String> {
     let safe_name = validate_profile_name(name)?;
-    Ok(profiles_dir().join(format!("{safe_name}.json")))
+    let json_name = format!("{safe_name}.json");
+    Ok(profiles_dir().join(json_name))
 }
 
 fn save_profile(profile: &Profile) -> Result<(), String> {
+    create_dir_all(profiles_dir())
+        .map_err(|e| e.to_string())?;
+
     let path = profile_path(&profile.name)?;
-    // TODO: Check if parent logic is correct
-    let profiles_dir = profiles_dir();
-    let profiles_parent = path.parent().unwrap_or(&profiles_dir);
-    std::fs::create_dir_all(profiles_parent).map_err(|e| e.to_string())?;
-    let json = serde_json::to_string_pretty(profile).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| format!("write {}: {e}", path.display()))
+    let json = serde_json::to_string_pretty(profile)
+        .map_err(|e| e.to_string())?;
+    write(&path, json)
+        .map_err(|e| format!("write {}: {e}", path.display()))
 }
 
 fn load_profile(name: &str) -> Result<Profile, String> {
     let path = profile_path(name)?;
-    let src = std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    serde_json::from_str(&src).map_err(|e| format!("parse {}: {e}", path.display()))
+
+    let src = read_to_string(&path)
+        .map_err(|e| format!("read {}: {e}", path.display()))?;
+    serde_json::from_str(&src)
+        .map_err(|e| format!("parse {}: {e}", path.display()))
 }
 
 fn list_profiles() -> Vec<String> {
     let dir = profiles_dir();
-    let Ok(entries) = std::fs::read_dir(&dir) else {
+    let Ok(entries) = read_dir(&dir) else {
         return Vec::new();
     };
     let mut names = Vec::new();
     for entry in entries.flatten() {
-        if entry.path().extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
+        let path = entry.path();
+        let Some(ext) = path.extension() else {
+            continue
+        };
+        if ext != "json" {
+            continue
         }
-        if let Some(stem) = entry.path().file_stem().and_then(|s| s.to_str()) {
-            names.push(stem.to_string());
-        }
+        // Convert to valid UTF-8, can fail if a filename has invalid encoding
+        let Some(stem_os) = path.file_stem() else {
+            continue
+        };
+        if let Some(stem) = stem_os.to_str() {
+            names.push(stem.to_string())
+        };
     }
     names.sort();
     names
@@ -180,7 +194,7 @@ fn list_profiles() -> Vec<String> {
 
 fn delete_profile(name: &str) -> Result<(), String> {
     let path = profile_path(name)?;
-    match std::fs::remove_file(&path) {
+    match remove_file(&path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e.to_string()),
@@ -817,7 +831,8 @@ fn cmd_profile_list() {
 
 fn cmd_profile_show(name: &str) -> Result<(), String> {
     let profile = load_profile(name)?;
-    let json = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&profile)
+        .map_err(|e| e.to_string())?;
     println!("{json}");
     Ok(())
 }

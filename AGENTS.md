@@ -87,14 +87,17 @@ fn update_lighting_color(settings: &mut DeviceSettings, color: [u8; 3]) {
 }
 ```
 
-## Don't chain more than 2 functions with lambdas
-Code is data. Code should document itself. 
+## Don't chain more than two functions with lambdas
+Code is data. Code should document itself. Prefer code that makes the intent obvious at a glance.
 ```rs
-// Bad - hidden intent, elements are collected just to be transformed again with join.
+// Bad - hidden intent, collects just to immediately transform again
 let list = pids.iter().map(|p| format!("{p}")).collect::<Vec<_>>().join(", ");
 
 // ✅ Good
 let list = format_list(pids);
+
+// Also good - short, direct, easy to read
+let ok = str.chars().all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '-' || c == '_');
 ```
 
 ## Use let-else with Option<T> where appropriate
@@ -102,11 +105,11 @@ let list = format_list(pids);
 // Bad - only two functions are chained but an empty lambda is used to satisfy the function argument which is awkward and unnecessarily complicated
 let definition = registry
         .find_by_pid(pid)
-        .ok_or_else(|| format!("PID {pid:#06x} is not in the device registry"))?;
+        .ok_or_else(|| format!("PID {pid:#06x} missing"))?;
 
 // Good - much cleaner
 let Some(definition) = registry.find_by_pid(pid) else {
-    return Err(format!("PID {pid:#06x} is not in the device registry"));
+    return Err(format!("PID {pid:#06x} missing"));
 };
 ```
 This improves readability by making returns explicit, so it’s clear where the function exits instead of hiding that control flow behind `?`
@@ -205,4 +208,27 @@ if premium_package.cooling { caps.push("cooling"); }
 if premium_package.power { caps.push("power"); }
 if premium_package.warranty { caps.push("warranty"); }
 if premium_package.battery { caps.push("battery"); }
+```
+
+## Don't clutter if statement logic to force a oneliner
+Avoid chaining multiple `Option`/`Result` transformations inside an if condition just to save lines. 
+This increases cognitive load and makes debugging harder, hindering variable reuse during future code refactors. 
+Instead, use let-else statements to extract values early to keep logic clear.
+```rs
+// ❌ Bad: Dense logic couples extraction, conversion, and comparison in one line.
+// Hard to set breakpoints on individual steps; requires mental parsing of a chain.
+if entry.path().extension().and_then(|e| e.to_str()) != Some("mp3") {
+    continue;
+}
+```
+
+```rs
+// ✅ Good: relaxed statements, easy to read, debug, and modify.
+let path = entry.path();
+let Some(ext) = path.extension() else {
+    continue
+};
+if ext != "mp3" {
+    continue
+}
 ```
