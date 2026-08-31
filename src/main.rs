@@ -1,3 +1,5 @@
+mod tui;
+
 use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
@@ -712,8 +714,8 @@ fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Resul
                 if i + 2 >= args.len() {
                     return Err("--dpi requires <x> <y>".into());
                 }
-                let x: u16 = args[i + 1].parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
-                let y: u16 = args[i + 2].parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
+                let x = args[i + 1].parse::<u16>().map_err(|e| e.to_string())?;
+                let y = args[i + 2].parse::<u16>().map_err(|e| e.to_string())?;
                 settings.dpi = Some(DpiSettings { x, y });
                 i += 3;
             }
@@ -733,9 +735,9 @@ fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Resul
                 if i + 3 >= args.len() {
                     return Err("--rgb requires <r> <g> <b>".into());
                 }
-                let r: u8 = args[i + 1].parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
-                let g: u8 = args[i + 2].parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
-                let b: u8 = args[i + 3].parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
+                let r = args[i + 1].parse::<u8>().map_err(|e| e.to_string())?;
+                let g = args[i + 2].parse::<u8>().map_err(|e| e.to_string())?;
+                let b = args[i + 3].parse::<u8>().map_err(|e| e.to_string())?;
                 // update_lighting_color(&mut settings, [r,g,b]);
                 if settings.lighting.is_none() {
                     settings.lighting = Some(LightingSettings { effect: Effect::Static, color: [r, g, b], brightness: 255 });
@@ -748,7 +750,7 @@ fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Resul
                 if i + 1 >= args.len() {
                     return Err("--brightness requires <0-255>".into());
                 }
-                let v: u8 = args[i + 1].parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
+                let v = args[i + 1].parse::<u8>().map_err(|e| e.to_string())?;
                 if settings.lighting.is_none() {
                     settings.lighting = Some(LightingSettings { effect: Effect::Static, color: [255, 255, 255], brightness: v });
                 } else if let Some(ref mut l) = settings.lighting {
@@ -760,7 +762,7 @@ fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Resul
                 if i + 1 >= args.len() {
                     return Err("--polling requires <hz>".into());
                 }
-                let hz: u16 = args[i + 1].parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
+                let hz = args[i + 1].parse::<u16>().map_err(|e| e.to_string())?;
                 settings.polling_hz = Some(hz);
                 i += 2;
             }
@@ -923,11 +925,13 @@ NOTES:
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     let Some(cmd) = args.first() else {
-        // TODO: Launch CLI interface if no argument is provided?
-        println!("{}", usage());
+        let api = HidApi::new().map_err(|e| format!("failed to initialize hidapi: {e}"))?;
+        let registry = load_registry();
+        tui::start(api, registry);
         return Ok(());
     };
 
+    // TODO The help command should be executable without loading registry or hidapi
     let api = HidApi::new().map_err(|e| format!("failed to initialize hidapi: {e}"))?;
     let registry = load_registry();
     let rest = &args[1..]; // args after the command name
@@ -959,11 +963,11 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
         }
         "dpi-stages" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
-            let active: u8 = vals
+            let active = vals
                 .first()
                 .ok_or("dpi-stages requires <active index>")?
-                .parse()
-                .map_err(|e: std::num::ParseIntError| format!("invalid active: {e}"))?;
+                .parse::<u8>()
+                .map_err(|e| format!("invalid active: {e}"))?;
             let values: Result<Vec<u16>, String> = vals[1..]
                 .iter()
                 .map(|v| v.parse::<u16>().map_err(|e| format!("invalid DPI value {v:?}: {e}")))
@@ -987,9 +991,9 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
             let led = parse_led(vals.get(1).map(|x| x.as_str()))?;
             let rgb: Rgb = match (vals.get(2), vals.get(3), vals.get(4)) {
                 (Some(r), Some(g), Some(b)) => [
-                    r.parse().map_err(|e: std::num::ParseIntError| format!("invalid r: {e}"))?,
-                    g.parse().map_err(|e: std::num::ParseIntError| format!("invalid g: {e}"))?,
-                    b.parse().map_err(|e: std::num::ParseIntError| format!("invalid b: {e}"))?,
+                    r.parse().map_err(|e| format!("invalid r: {e}"))?,
+                    g.parse().map_err(|e| format!("invalid g: {e}"))?,
+                    b.parse().map_err(|e| format!("invalid b: {e}"))?,
                 ],
                 _ => [255, 255, 255],
             };
@@ -1001,7 +1005,7 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
                 .first()
                 .ok_or("brightness requires <0-255>")?
                 .parse()
-                .map_err(|e: std::num::ParseIntError| format!("invalid brightness: {e}"))?;
+                .map_err(|e| format!("invalid brightness: {e}"))?;
             let led = parse_led(vals.get(1).map(|x| x.as_str()))?;
             cmd_brightness(&api, &registry, pid, value, led)
         }
@@ -1016,7 +1020,7 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
                 .first()
                 .ok_or("polling requires <hz>")?
                 .parse()
-                .map_err(|e: std::num::ParseIntError| format!("invalid hz: {e}"))?;
+                .map_err(|e| format!("invalid hz: {e}"))?;
             cmd_polling(&api, &registry, pid, hz)
         }
         "getpolling" => {
@@ -1064,12 +1068,12 @@ fn parse_dpi(vals: Vec<String>) -> Result<(u16, u16), String> {
         return Err("dpi requires <x>".to_string())
     }
     let x: u16 = vals[0].parse()
-        .map_err(|e: std::num::ParseIntError| format!("invalid x: {e}"))?;
+        .map_err(|e| format!("invalid x: {e}"))?;
     if vals.len() == 1 {
         return Ok((x, x))
     }
     let y: u16 = vals[1].parse()
-        .map_err(|e: std::num::ParseIntError| format!("invalid y: {e}"))?;
+        .map_err(|e| format!("invalid y: {e}"))?;
     Ok((x, y))
 }
 

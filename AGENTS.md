@@ -246,3 +246,19 @@ if vals.is_empty() {
 }
 let x: u16 = values[0].parse().map_err(|e| format!("invalid x: {e}"))?;
 ```
+
+## Don't explicitly annotate inferred error types
+Let Rust infer error types whenever possible. Explicitly annotating the error parameter adds unnecessary verbosity and noise for readers.
+Prefer specifying the intended parsed value type with turbofish syntax. 
+Only annotate the error type as a last resort, after specifying the parsed type, if the compiler still cannot infer it.
+
+```rs
+// Bad
+let x: u32 = str.parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
+
+// Good
+let x = str.parse::<u32>().map_err(|e| e.to_string())?;
+
+// Also good but in this case turbofish syntax is not required
+let x: u32 = str.parse().map_err(|e| format!("invalid x: {e}"))?;
+```
