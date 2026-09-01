@@ -262,3 +262,30 @@ let x = str.parse::<u32>().map_err(|e| e.to_string())?;
 // Also good but in this case turbofish syntax is not required
 let x: u32 = str.parse().map_err(|e| format!("invalid x: {e}"))?;
 ```
+
+## Prefer adjusting function parameters instead of repeating call-site conversions
+If we own a function and its call sites repeatedly perform the same conversion to satisfy the function's parameter,
+change the function to accept the type that callers already have.
+Do not add repetitive adapter code at every call site when a small change to the callee can eliminate it.
+
+```rs
+// ❌ Avoid this when every caller has Option<&String> and we own the function.
+fn parse_num(raw: Option<&str>) -> Result<usize, String> {
+    match raw {
+        Some(r) => parse_num_value(r),
+        None => Ok(DEFAULT_NUMBER),
+    }
+}
+parse_num(vals.get(4).map(|v| v.as_str()))?;
+
+
+// ✅ Match the function's input type to the type callers already have.
+fn parse_num(raw: Option<&String>) -> Result<usize, String> {
+    match raw {
+        Some(r) => parse_num_value(r),
+        None => Ok(DEFAULT_NUMBER),
+    }
+}
+parse_num(vals.get(4))?;
+
+```

@@ -47,12 +47,13 @@ const LEFT_T: char = '├';
 const RIGHT_T: char = '┤';
 const HORIZONTAL: char = '─';
 const VERTICAL: char = '│';
-const WIDTH: usize = 140;
+const WIDTH: usize = 48;
 
 pub fn start(api: HidApi, registry: Registry) {
     let mut buffer = String::with_capacity(WIDTH * 15);
     draw_top(&mut buffer);
-
+    draw_separator(&mut buffer);
+    draw_separator(&mut buffer);
     draw_bottom(&mut buffer);
 
     println!("┌─────────────────────────────────────────────┐");
@@ -76,18 +77,21 @@ fn draw_separator(s: &mut String) {
     s.push(LEFT_T);
     draw_horizontal(s);
     s.push(RIGHT_T);
+    s.push('\n');
 }
 
 fn draw_top(s: &mut String) {
     s.push(TOP_LEFT);
     draw_horizontal(s);
     s.push(TOP_RIGHT);
+    s.push('\n');
 }
 
 fn draw_bottom(s: &mut String) {
     s.push(DOWN_LEFT);
     draw_horizontal(s);
     s.push(DOWN_RIGHT);
+    s.push('\n');
 }
 
 fn draw_horizontal(s: &mut String) {

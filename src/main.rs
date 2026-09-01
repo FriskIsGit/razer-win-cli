@@ -227,7 +227,8 @@ fn load_registry() -> Registry {
     registry
 }
 
-fn parse_led(raw: Option<&str>) -> Result<u8, String> {
+/// Parses an optional LED value, defaulting to [`led_id::LOGO`] if absent.
+fn parse_led(raw: Option<&String>) -> Result<u8, String> {
     match raw {
         Some(r) => parse_hex_to_u8(r),
         None => Ok(led_id::LOGO),
@@ -641,7 +642,7 @@ fn cmd_get_brightness(api: &HidApi, registry: &Registry, pid: u16, led: u8) -> R
     })?;
     println!(
         "{}: brightness {}/255 ({}%) on LED {led:#04x}",
-        def.name, value, value * 100 / 255
+        def.name, value, value as usize * 100 / 255
     );
     Ok(())
 }
@@ -976,26 +977,23 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
         }
         "color" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
-            let r = parse_rgb_component(&vals, 0, "r")?;
-            let g = parse_rgb_component(&vals, 1, "g")?;
-            let b = parse_rgb_component(&vals, 2, "b")?;
-            let led = parse_led(vals.get(3).map(|x| x.as_str()))?;
-            cmd_color(&api, &registry, pid, [r, g, b], led)
+            let rgb = parse_rgb(&vals)?;
+            let led = parse_led(vals.get(3))?;
+            cmd_color(&api, &registry, pid, rgb, led)
         }
         "effect" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
-            let effect = Effect::parse(
-                vals.first()
-                    .ok_or("effect requires <static|breathing|spectrum|wave|reactive|none>")?,
-            )?;
-            let led = parse_led(vals.get(1).map(|x| x.as_str()))?;
-            let rgb: Rgb = match (vals.get(2), vals.get(3), vals.get(4)) {
-                (Some(r), Some(g), Some(b)) => [
-                    r.parse().map_err(|e| format!("invalid r: {e}"))?,
-                    g.parse().map_err(|e| format!("invalid g: {e}"))?,
-                    b.parse().map_err(|e| format!("invalid b: {e}"))?,
-                ],
-                _ => [255, 255, 255],
+
+            let Some(effect_name) = vals.first() else {
+                return Err("effect requires <static|breathing|spectrum|wave|reactive|none>".to_owned())
+            };
+            let effect = Effect::parse(effect_name)?;
+
+            let led = parse_led(vals.get(1))?;
+
+            let rgb: Rgb = match vals.get(2..5) {
+                Some(values) => parse_rgb(values)?,
+                None => [255, 255, 255]
             };
             cmd_effect(&api, &registry, pid, effect, led, rgb)
         }
@@ -1006,12 +1004,12 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
                 .ok_or("brightness requires <0-255>")?
                 .parse()
                 .map_err(|e| format!("invalid brightness: {e}"))?;
-            let led = parse_led(vals.get(1).map(|x| x.as_str()))?;
+            let led = parse_led(vals.get(1))?;
             cmd_brightness(&api, &registry, pid, value, led)
         }
         "getbrightness" => {
             let (pid, vals) = resolve_pid(&api, &registry, rest)?;
-            let led = parse_led(vals.first().map(|x| x.as_str()))?;
+            let led = parse_led(vals.first())?;
             cmd_get_brightness(&api, &registry, pid, led)
         }
         "polling" => {
@@ -1077,12 +1075,14 @@ fn parse_dpi(vals: Vec<String>) -> Result<(u16, u16), String> {
     Ok((x, y))
 }
 
-fn parse_rgb_component(vals: &[String], index: usize, name: &str) -> Result<u8, String> {
-    let str = match vals.get(index) {
-        Some(s) => s,
-        None => return Err(format!("color requires <{name}>")),
-    };
-    str.parse::<u8>().map_err(|e| format!("invalid {name}: {e}"))
+fn parse_rgb(vals: &[String]) -> Result<Rgb, String> {
+    if vals.len() < 3 {
+        return Err("rgb requires 3 channels".to_string())
+    }
+    let r = vals[0].parse::<u8>().map_err(|e| format!("invalid r channel: {e}"))?;
+    let g = vals[1].parse::<u8>().map_err(|e| format!("invalid g channel: {e}"))?;
+    let b = vals[2].parse::<u8>().map_err(|e| format!("invalid b channel: {e}"))?;
+    Ok([r, g, b])
 }
 
 fn main() -> ExitCode {
