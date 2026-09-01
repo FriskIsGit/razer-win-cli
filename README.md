@@ -73,20 +73,18 @@ DEVICE:
   info                                      Show device details (serial, firmware, capabilities)
   battery                                   Read battery level + charging status
 
-DPI:
+PERFORMANCE:
+  dpi                                       Read current DPI
   dpi <x> [y]                               Set DPI (y defaults to x)
-  getdpi                                    Read current DPI
   dpi-stages <active> <v1> [<v2> ...]       Set 2-5 DPI stages; <active> is the 0-based index
+  polling                                   Read polling rate
+  polling <hz>                              Set polling rate (125/500/1000)
 
 LIGHTING / RGB:
   color <r> <g> <b> [led]                   Set a static colour
   effect <effect> [led] [r g b]             Set lighting effect (static|breathing|spectrum|wave|reactive|none)
-  brightness <0-255> [led]                  Set LED brightness
-  getbrightness [led]                       Read LED brightness
-
-POLLING:
-  polling <hz>                              Set polling rate (125/500/1000)
-  getpolling                                Read polling rate
+  brightness <0-255> [--led <LED>]          Set LED brightness
+  brightness [--led <LED>]                  Read LED brightness
 
 PROFILES:
   profile save <name> [--pid <pid>] [flags] Save settings as a named profile

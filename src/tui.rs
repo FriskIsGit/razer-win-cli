@@ -1,9 +1,9 @@
 use std::fmt::Write;
 use hidapi::HidApi;
 use razer_hid::Registry;
+use crate::cmd;
 
 fn test() {
-    // 1. Strip get prefix
     // After setting DPI do we get a report back stating what DPI is currently set?
     print_color_bar(128, 255, 128, 50);
     
@@ -49,9 +49,14 @@ const HORIZONTAL: char = '─';
 const VERTICAL: char = '│';
 const WIDTH: usize = 48;
 
-pub fn start(api: HidApi, registry: Registry) {
+pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
+    let pid = cmd::auto_detect_pid(&api, &registry)?;
+
+    let (device, definition) = cmd::open_device(&api, &registry, pid)?;
+
     let mut buffer = String::with_capacity(WIDTH * 15);
     draw_top(&mut buffer);
+    box_content(&mut buffer, &definition.name);
     draw_separator(&mut buffer);
     draw_separator(&mut buffer);
     draw_bottom(&mut buffer);
@@ -70,34 +75,49 @@ pub fn start(api: HidApi, registry: Registry) {
     println!("│  [↑/↓] Navigate  [Enter] Edit  [q] Quit     │");
     println!("└─────────────────────────────────────────────┘");
 
-    println!("{buffer}")
+    println!("{buffer}");
+    Ok(())
 }
 
 fn draw_separator(s: &mut String) {
     s.push(LEFT_T);
-    draw_horizontal(s);
+    draw_horizontal_line(s);
     s.push(RIGHT_T);
     s.push('\n');
 }
 
 fn draw_top(s: &mut String) {
     s.push(TOP_LEFT);
-    draw_horizontal(s);
+    draw_horizontal_line(s);
     s.push(TOP_RIGHT);
     s.push('\n');
 }
 
 fn draw_bottom(s: &mut String) {
     s.push(DOWN_LEFT);
-    draw_horizontal(s);
+    draw_horizontal_line(s);
     s.push(DOWN_RIGHT);
     s.push('\n');
 }
 
-fn draw_horizontal(s: &mut String) {
+fn draw_horizontal_line(s: &mut String) {
     for _ in 0..WIDTH {
         s.push(HORIZONTAL);
     }
+}
+
+
+fn box_content(s: &mut String, content: &str) {
+    s.push(VERTICAL);
+    s.push(' ');
+    s.push_str(content);
+    let content_width = content.chars().count();
+    let padding = WIDTH.saturating_sub(content_width + 1);
+    for _ in 0..padding {
+        s.push(' ');
+    }
+    s.push(VERTICAL);
+    s.push('\n');
 }
 
 fn print_color_bar(r: u8, g: u8, b: u8, length: usize) {
