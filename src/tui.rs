@@ -95,7 +95,7 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
 
         draw_ui(&mut buffer, definition, index, &menu_items, edit_mode);
 
-        println!("BUFFER LENGTH: {}", buffer.len());
+        // println!("BUFFER LENGTH: {}", buffer.len());
         println!("{buffer}");
         buffer.clear();
 
@@ -120,14 +120,15 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
                     if dpi_value < DPI_STEP {
                         continue
                     }
+                    let new_value = dpi_value - DPI_STEP;
                     if index == DPI_X_INDEX {
-                        x -= DPI_STEP;
+                        x = new_value;
                     } else {
-                        y -= DPI_STEP;
+                        y = new_value;
                     }
                     // Better handle error to show in UI
                     match cmd_dpi(&device, definition, x as u16, y as u16) {
-                        Ok(()) => menu_items[index].value = Some(x),
+                        Ok(()) => menu_items[index].value = Some(new_value),
                         Err(_) => continue,
                     }
                 } else if menu_items[index].action == Action::Polling {
@@ -160,7 +161,9 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
                         Ok(()) => { menu_items[index].value = Some(new_value); }
                         Err(_) => continue,
                     }
-                } else if menu_items[index].action == Action::Polling {}
+                } else if menu_items[index].action == Action::Polling {
+
+                }
             }
 
             KeyCode::ArrowDown | KeyCode::Char('s') | KeyCode::Char('S') => {
