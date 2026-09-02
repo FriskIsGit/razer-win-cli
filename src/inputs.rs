@@ -221,7 +221,7 @@ pub(crate) mod windows {
 }
 
 
-#[cfg(all(unix))]
+#[cfg(unix)]
 pub(crate) mod unix {
     use super::KeyCode;
 
@@ -317,3 +317,9 @@ pub(crate) mod unix {
         println!("\x1b[2J\x1b[3J\x1b[H");
     }
 }
+
+#[cfg(target_os = "windows")]
+pub use windows::{clear_console, read_key};
+
+#[cfg(unix)]
+pub use unix::{clear_console, read_key};

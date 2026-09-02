@@ -1,5 +1,6 @@
 mod tui;
 mod cmd;
+mod inputs;
 
 use std::env;
 use std::process::ExitCode;
