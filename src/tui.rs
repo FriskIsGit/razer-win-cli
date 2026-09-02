@@ -1,8 +1,9 @@
-use std::cmp::max;
+use std::cmp::{max, PartialEq};
 use std::fmt::Write;
 use hidapi::HidApi;
-use razer_hid::Registry;
+use razer_hid::{DeviceDef, Registry};
 use crate::cmd;
+use crate::cmd::{cmd_dpi, cmd_get_dpi, cmd_get_polling};
 use crate::inputs::KeyCode;
 
 fn test() {
@@ -35,23 +36,34 @@ const RIGHT_T: char = '┤';
 const HORIZONTAL: char = '─';
 const VERTICAL: char = '│';
 const WIDTH: usize = 48;
-const MAIN_MENU_ITEMS: usize = 5;
+const DPI_STEP: usize = 50;
 
 struct MenuItem {
     name: String,
     value: Option<usize>,
     unit: Option<String>,
     is_expandable: bool,
+    action: Action,
 }
 
 impl MenuItem {
-    fn new(name: &str, value: Option<usize>, unit: &str, is_expandable: bool) -> Self {
-        Self { name: name.into(), value, unit: Some(unit.into()), is_expandable }
+    fn new(name: &str, value: Option<usize>, unit: &str, action: Action) -> Self {
+        Self { name: name.into(), value, unit: Some(unit.into()), is_expandable: false, action}
     }
 
-    fn new_expandable(name: &str) -> Self {
-        Self { name: name.into(), value: None, unit: None, is_expandable: true }
+    fn new_expandable(name: &str, action: Action) -> Self {
+        Self { name: name.into(), value: None, unit: None, is_expandable: true, action }
     }
+}
+
+#[derive(PartialEq, Eq)]
+enum Action {
+    Noop,
+    Dpi,
+    Polling,
+    Brightness,
+    Lighting,
+    Profiles,
 }
 
 pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
@@ -59,45 +71,116 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
 
     let (device, definition) = cmd::open_device(&api, &registry, pid)?;
 
-    let mut in_main_menu = true;
+    let mut edit_mode = false;
     let mut index = 0;
 
-    let dpi_x = MenuItem::new("DPI X", Some(0), "", false);
-    let dpi_y = MenuItem::new("DPI Y", Some(0), "", false);
-    let polling = MenuItem::new("POLLING (RATE)", Some(0), "Hz", false);
-    let lighting = MenuItem::new_expandable("LIGHTING");
-    let profiles = MenuItem::new_expandable("PROFILES");
-    let menu_items = [dpi_x, dpi_y, polling, lighting, profiles];
+    let (x, y) = cmd_get_dpi(&device, definition)?;
+    let polling = cmd_get_polling(&device, definition)?;
 
-    let mut buffer = String::with_capacity(1000);
-    while in_main_menu {
+    const DPI_X_INDEX: usize = 0;
+    const DPI_Y_INDEX: usize = 1;
+    const POLLING_INDEX: usize = 2;
+
+    let mut dpi_x = MenuItem::new("DPI X", Some(x as usize), "", Action::Dpi);
+    let mut dpi_y = MenuItem::new("DPI Y", Some(y as usize), "", Action::Dpi);
+    let mut polling = MenuItem::new("POLLING (RATE)", Some(polling as usize), "Hz", Action::Polling);
+    let mut lighting = MenuItem::new_expandable("LIGHTING", Action::Lighting);
+    let mut profiles = MenuItem::new_expandable("PROFILES", Action::Profiles);
+    let mut menu_items = [dpi_x, dpi_y, polling, lighting, profiles];
+
+
+    let mut buffer = String::with_capacity(1500);
+    loop {
         crate::inputs::clear_console();
 
-        draw_top(&mut buffer);
-        box_content(&mut buffer, &definition.name);
-        draw_separator(&mut buffer);
-        draw_options(&mut buffer, index, &menu_items);
-        draw_separator(&mut buffer);
-        draw_navigation(&mut buffer);
-        draw_bottom(&mut buffer);
+        draw_ui(&mut buffer, definition, index, &menu_items, edit_mode);
 
         println!("BUFFER LENGTH: {}", buffer.len());
         println!("{buffer}");
         buffer.clear();
 
         match crate::inputs::read_key() {
-            KeyCode::Backspace => {}
             KeyCode::Char('q') | KeyCode::Char('Q') => {
-                in_main_menu = false;
+                break;
             }
             KeyCode::ArrowUp | KeyCode::Char('w') | KeyCode::Char('W') => {
                 if index > 0 {
                     index -= 1;
                 }
             }
+            KeyCode::ArrowLeft => {
+                if menu_items[index].is_expandable {
+                    continue
+                }
+                let is_dpi = menu_items[index].action == Action::Dpi;
+                if is_dpi {
+                    let dpi_value = menu_items[index].value.expect("DPI must have value");
+                    let mut x = menu_items[DPI_X_INDEX].value.expect("DPI X must have value");
+                    let mut y = menu_items[DPI_Y_INDEX].value.expect("DPI Y must have value");
+                    if dpi_value < DPI_STEP {
+                        continue
+                    }
+                    if index == DPI_X_INDEX {
+                        x -= DPI_STEP;
+                    } else {
+                        y -= DPI_STEP;
+                    }
+                    // Better handle error to show in UI
+                    match cmd_dpi(&device, definition, x as u16, y as u16) {
+                        Ok(()) => menu_items[index].value = Some(x),
+                        Err(_) => continue,
+                    }
+                } else if menu_items[index].action == Action::Polling {
+
+                }
+            }
+            KeyCode::ArrowRight => {
+                if menu_items[index].is_expandable { continue; }
+                let is_dpi = menu_items[index].action == Action::Dpi;
+                if is_dpi {
+                    let dpi_value = menu_items[index].value.expect("DPI must have value");
+                    let mut x = menu_items[DPI_X_INDEX].value.expect("DPI X must have value");
+                    let mut y = menu_items[DPI_Y_INDEX].value.expect("DPI Y must have value");
+
+                    let mut max_dpi = 45000;
+                    if let Some(dpi_max) = definition.dpi_max {
+                        max_dpi = dpi_max;
+                    };
+                    let new_value = dpi_value + DPI_STEP;
+                    if new_value > max_dpi as usize {
+                        continue
+                    }
+                    if index == DPI_X_INDEX {
+                        x = new_value;
+                    } else {
+                        y = new_value;
+                    }
+
+                    match cmd_dpi(&device, definition, x as u16, y as u16) {
+                        Ok(()) => { menu_items[index].value = Some(new_value); }
+                        Err(_) => continue,
+                    }
+                } else if menu_items[index].action == Action::Polling {}
+            }
+
             KeyCode::ArrowDown | KeyCode::Char('s') | KeyCode::Char('S') => {
                 if index < menu_items.len() - 1 {
                     index += 1;
+                }
+            }
+            KeyCode::Enter => {
+                let item = &menu_items[index];
+                if item.is_expandable {
+                    match item.action {
+                        Action::Lighting => start_lighting_menu(&mut buffer),
+                        Action::Profiles => start_profiles_menu(&mut buffer),
+                        _ => {}
+                    }
+                } else {
+                    if edit_mode {
+
+                    }
+                    edit_mode = !edit_mode;
                 }
             }
             _ => {}
@@ -107,7 +190,65 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
     Ok(())
 }
 
-fn draw_options(s: &mut String, index: usize, items: &[MenuItem; 5]) {
+fn draw_ui(buffer: &mut String, definition: &DeviceDef, index: usize, menu_items: &[MenuItem; 5], edit_mode: bool) {
+    draw_top(buffer);
+    box_content(buffer, &definition.name);
+    draw_separator(buffer);
+    draw_options(buffer, index, menu_items, edit_mode);
+    draw_separator(buffer);
+    draw_navigation(buffer);
+    draw_bottom(buffer);
+}
+
+fn start_profiles_menu(buffer: &mut String) {
+    let index = 0;
+    let edit_mode = false;
+    loop {
+        crate::inputs::clear_console();
+
+        draw_top(buffer);
+        draw_separator(buffer);
+        draw_separator(buffer);
+        draw_navigation(buffer);
+        draw_bottom(buffer);
+
+        println!("{buffer}");
+        buffer.clear();
+
+        match crate::inputs::read_key() {
+            KeyCode::Backspace => {
+                break;
+            }
+            _ => {}
+        }
+    }
+}
+
+fn start_lighting_menu(buffer: &mut String) {
+    let index = 0;
+    let edit_mode = false;
+    loop {
+        crate::inputs::clear_console();
+
+        draw_top(buffer);
+        draw_separator(buffer);
+        draw_separator(buffer);
+        draw_navigation(buffer);
+        draw_bottom(buffer);
+
+        println!("{buffer}");
+        buffer.clear();
+
+        match crate::inputs::read_key() {
+            KeyCode::Backspace => {
+                break;
+            }
+            _ => {}
+        }
+    }
+}
+
+fn draw_options(s: &mut String, index: usize, items: &[MenuItem; 5], edit_mode: bool) {
     // Find widest item
     let mut max_length = 0;
     for item in items {
@@ -128,8 +269,15 @@ fn draw_options(s: &mut String, index: usize, items: &[MenuItem; 5]) {
             content.push('>');
         } else {
             content.push_str(&item.value.unwrap().to_string());
-            content.push(' ');
-            content.push_str(item.unit.as_ref().unwrap());
+            if let Some(unit) = item.unit.as_ref() {
+                content.push(' ');
+                content.push_str(unit);
+            }
+
+            if i == index && edit_mode {
+                content.push(' ');
+                content.push_str("[EDITING]");
+            }
         }
         box_content(s, &content);
         content.clear();

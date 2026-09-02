@@ -3,6 +3,7 @@ mod cmd;
 mod inputs;
 
 use std::env;
+use std::fmt::{Debug};
 use std::process::ExitCode;
 
 use hidapi::HidApi;
@@ -14,6 +15,7 @@ use razer_hid::{DeviceDef, Registry};
 // =========================================================================
 
 use serde::{Deserialize, Serialize};
+use crate::cmd::open_device;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -168,63 +170,71 @@ fn update_lighting_color(settings: &mut DeviceSettings, color: [u8; 3]) {
 
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
+    let is_help = args.iter().any(|s| s == "help" || s == "-h" || s == "--help");
+    if is_help {
+        println!("{}", usage());
+        return Ok(())
+    }
+    let api = HidApi::new().map_err(|e| format!("failed to initialize hidapi: {e}"))?;
+    let registry = load_registry();
+
     let Some(cmd) = args.first() else {
-        let api = HidApi::new().map_err(|e| format!("failed to initialize hidapi: {e}"))?;
-        let registry = load_registry();
         return tui::start(api, registry);
     };
 
-    // TODO The help command should be executable without loading registry or hidapi
-    let api = HidApi::new().map_err(|e| format!("failed to initialize hidapi: {e}"))?;
-    let registry = load_registry();
     let rest = &args[1..]; // args after the command name
     return perform_command(api, registry, cmd, rest);
 }
 
 fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String]) -> Result<(), String> {
+    let (pid, vals) = cmd::resolve_pid(&api, &registry, rest)?;
+    let (device, def) = open_device(&api, &registry, pid)?;
     match cmd.as_str() {
         "list" => {
             cmd::cmd_list(&api, &registry);
             Ok(())
         }
         "info" => {
-            let (pid, _) = cmd::resolve_pid(&api, &registry, rest)?;
-            cmd::cmd_info(&api, &registry, pid)
+            cmd::cmd_info(&device, def)
         }
         "battery" => {
-            let (pid, _) = cmd::resolve_pid(&api, &registry, rest)?;
-            cmd::cmd_battery(&api, &registry, pid)
+            let battery = cmd::cmd_battery(&device, def)?;
+            let (level, charging) = (battery.level, battery.charging);
+            println!("{}: battery {level}%{}", def.name, if charging { " (charging)" } else { "" });
+            Ok(())
         }
         "dpi" => {
-            let (pid, vals) = cmd::resolve_pid(&api, &registry, rest)?;
             if vals.is_empty() {
-                return cmd::cmd_get_dpi(&api, &registry, pid)
+                let (x, y) = cmd::cmd_get_dpi(&device, def)?;
+                println!("{}: DPI {x}x{y}", def.name);
+            } else {
+                let (x, y) = parse_dpi(vals)?;
+                cmd::cmd_dpi(&device, &def, x, y)?;
+                println!("{}: set DPI {x}x{y}", def.name);
             }
-            let (x, y) = parse_dpi(vals)?;
-            cmd::cmd_dpi(&api, &registry, pid, x, y)
+            Ok(())
         }
         "dpi-stages" => {
-            let (pid, vals) = cmd::resolve_pid(&api, &registry, rest)?;
-            let active = vals
-                .first()
-                .ok_or("dpi-stages requires <active index>")?
-                .parse::<u8>()
-                .map_err(|e| format!("invalid active: {e}"))?;
-            let values: Result<Vec<u16>, String> = vals[1..]
-                .iter()
-                .map(|v| v.parse::<u16>().map_err(|e| format!("invalid DPI value {v:?}: {e}")))
-                .collect();
-            cmd::cmd_dpi_stages(&api, &registry, pid, active, &values?)
+            let Some(active_index) = vals.first() else {
+                return Err("Usage: dpi-stages <active index> [stages]".into())
+            };
+            let active = active_index.parse::<u8>()
+                .map_err(|e| format!("invalid active index: {e}"))?;
+
+            let values = to_vec_u16(&vals, 1)?;
+            cmd::cmd_dpi_stages(&device, def, active, &values)
         }
         "color" => {
-            let (pid, vals) = cmd::resolve_pid(&api, &registry, rest)?;
             let rgb = parse_rgb(&vals)?;
             let led = parse_led(vals.get(3))?;
-            cmd::cmd_color(&api, &registry, pid, rgb, led)
+            cmd::cmd_color(&device, &def, rgb, led)?;
+            println!(
+                "{}: set static color #{:02x}{:02x}{:02x} on LED {led:#04x}",
+                def.name, rgb[0], rgb[1], rgb[2]
+            );
+            Ok(())
         }
         "effect" => {
-            let (pid, vals) = cmd::resolve_pid(&api, &registry, rest)?;
-
             let Some(effect_name) = vals.first() else {
                 return Err("effect requires <static|breathing|spectrum|wave|reactive|none>".to_owned())
             };
@@ -238,21 +248,37 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
             cmd::cmd_effect(&api, &registry, pid, effect, led, rgb)
         }
         "brightness" => {
-            let (pid, vals) = cmd::resolve_pid(&api, &registry, rest)?;
             let (brightness, led) = parse_brightness_args(&vals)?;
             match brightness {
-                Some(value) => cmd::cmd_brightness(&api, &registry, pid, value, led),
-                None => cmd::cmd_get_brightness(&api, &registry, pid, led)
+                Some(value) => {
+                    cmd::cmd_brightness(&device, def, value, led)?;
+                    let mouse_name = &def.name;
+                    let percentage = value as u32 * 100 / 255;
+                    println!(
+                        "{mouse_name}: set brightness {value}/255 ({percentage}%) on LED {led:#04x}",
+                    );
+                },
+                None => {
+                    let value = cmd::cmd_get_brightness(&device, def, led)?;
+                    println!(
+                        "{}: brightness {}/255 ({}%) on LED {led:#04x}",
+                        def.name, value, value as usize * 100 / 255
+                    );
+                }
             }
+            Ok(())
         }
         "polling" => {
-            let (pid, vals) = cmd::resolve_pid(&api, &registry, rest)?;
             if vals.is_empty() {
-                return cmd::cmd_get_polling(&api, &registry, pid)
+                let hz = cmd::cmd_get_polling(&device, &def)?;
+                println!("{}: polling at {hz} Hz", def.name);
+            } else {
+                let hz: u16 = vals[0].parse()
+                    .map_err(|e| format!("invalid hz: {e}"))?;
+                cmd::cmd_polling(&device, &def, hz)?;
+                println!("{}: set polling rate {hz} Hz", def.name);
             }
-            let hz: u16 = vals[0].parse()
-                .map_err(|e| format!("invalid hz: {e}"))?;
-            cmd::cmd_polling(&api, &registry, pid, hz)
+            Ok(())
         }
         "profile" => {
             let sub = rest.first().map(|s| s.as_str()).unwrap_or("");
@@ -282,12 +308,19 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
                 other => Err(format!("unknown profile subcommand {other:?}")),
             }
         }
-        "help" | "--help" | "-h" => {
-            println!("{}", usage());
-            Ok(())
-        }
         other => Err(format!("unknown command {other:?}")),
     }
+}
+
+fn to_vec_u16(vec: &Vec<String>, from: usize) -> Result<Vec<u16>, String> {
+    let mut output = Vec::with_capacity(vec.len()-from);
+    for i in from..vec.len() {
+        let Ok(val) = vec[i].parse::<u16>() else {
+            return Err(format!("invalid u16: {}", vec[i]));
+        };
+        output.push(val);
+    }
+    Ok(output)
 }
 
 fn parse_brightness_args(args: &Vec<String>) -> Result<(Option<u8>, u8), String> {

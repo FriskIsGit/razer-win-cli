@@ -122,9 +122,7 @@ fn get_capabilities(def: &DeviceDef) -> Vec<&str> {
     caps
 }
 
-pub fn cmd_info(api: &HidApi, registry: &Registry, pid: u16) -> Result<(), String> {
-    let (device, def) = open_device(api, registry, pid)?;
-
+pub fn cmd_info(device: &Device, def: &DeviceDef) -> Result<(), String> {
     println!("Device: {}", def.name);
     println!("  PID:            {:#06x}", def.usb_pid);
     println!("  Type:           {:?}", def.device_type);
@@ -166,38 +164,27 @@ pub fn cmd_info(api: &HidApi, registry: &Registry, pid: u16) -> Result<(), Strin
     Ok(())
 }
 
-pub fn cmd_dpi(api: &HidApi, registry: &Registry, pid: u16, x: u16, y: u16) -> Result<(), String> {
-    let (device, def) = open_device(api, registry, pid)?;
+pub fn cmd_dpi(device: &Device, def: &DeviceDef, x: u16, y: u16) -> Result<(), String> {
     if !def.capabilities.dpi {
         return Err(format!("{} does not support DPI", def.name));
     }
     with_retry(3, "set DPI", || {
         device.set_dpi(VARSTORE, x, y).map_err(|e| e.to_string())
     })?;
-    println!("{}: set DPI {x}x{y}", def.name);
     Ok(())
 }
 
-pub fn cmd_get_dpi(api: &HidApi, registry: &Registry, pid: u16) -> Result<(), String> {
-    let (device, def) = open_device(api, registry, pid)?;
-    if !def.capabilities.dpi {
-        return Err(format!("{} does not support DPI", def.name));
+pub fn cmd_get_dpi(device: &Device, definition: &DeviceDef) -> Result<(u16, u16), String> {
+    if !definition.capabilities.dpi {
+        return Err(format!("{} does not support DPI", definition.name));
     }
     let (x, y) = with_retry(3, "get DPI", || {
         device.get_dpi(VARSTORE).map_err(|e| e.to_string())
     })?;
-    println!("{}: DPI {x}x{y}", def.name);
-    Ok(())
+    Ok((x, y))
 }
 
-pub fn cmd_dpi_stages(
-    api: &HidApi,
-    registry: &Registry,
-    pid: u16,
-    active: u8,
-    values: &[u16],
-) -> Result<(), String> {
-    let (device, def) = open_device(api, registry, pid)?;
+pub fn cmd_dpi_stages(device: &Device, def: &DeviceDef, active: u8, values: &[u16]) -> Result<(), String> {
     if !def.capabilities.dpi {
         return Err(format!("{} does not support DPI", def.name));
     }
@@ -220,19 +207,13 @@ pub fn cmd_dpi_stages(
     Ok(())
 }
 
-pub fn cmd_color(api: &HidApi, registry: &Registry, pid: u16, rgb: Rgb, led: u8) -> Result<(), String> {
-    let (device, def) = open_device(api, registry, pid)?;
+pub fn cmd_color(device: &Device, def: &DeviceDef, rgb: Rgb, led: u8) -> Result<(), String> {
     if !def.capabilities.lighting {
         return Err(format!("{} does not support lighting", def.name));
     }
     with_retry(3, "set color", || {
         device.set_static_color(NOSTORE, led, rgb).map_err(|e| e.to_string())
-    })?;
-    println!(
-        "{}: set static color #{:02x}{:02x}{:02x} on LED {led:#04x}",
-        def.name, rgb[0], rgb[1], rgb[2]
-    );
-    Ok(())
+    })
 }
 
 pub fn cmd_effect(
@@ -262,76 +243,56 @@ pub fn cmd_effect(
     Ok(())
 }
 
-pub fn cmd_brightness(api: &HidApi, registry: &Registry, pid: u16, value: u8, led: u8) -> Result<(), String> {
-    let (device, definition) = open_device(api, registry, pid)?;
+pub fn cmd_brightness(device: &Device, definition: &DeviceDef, value: u8, led: u8) -> Result<(), String> {
     if !definition.capabilities.lighting {
         return Err(format!("{} does not support lighting", definition.name));
     }
     with_retry(3, "set brightness", || {
         device.set_brightness(NOSTORE, led, value).map_err(|e| e.to_string())
-    })?;
-    let mouse_name = &definition.name;
-    let percentage = value as u32 * 100 / 255;
-    println!(
-        "{mouse_name}: set brightness {value}/255 ({percentage}%) on LED {led:#04x}",
-    );
-    Ok(())
+    })
 }
 
-pub fn cmd_get_brightness(api: &HidApi, registry: &Registry, pid: u16, led: u8) -> Result<(), String> {
-    let (device, def) = open_device(api, registry, pid)?;
+pub fn cmd_get_brightness(device: &Device, def: &DeviceDef, led: u8) -> Result<u8, String> {
     if !def.capabilities.lighting {
         return Err(format!("{} does not support lighting", def.name));
     }
-    let value = with_retry(3, "get brightness", || {
+    with_retry(3, "get brightness", || {
         device.get_brightness(NOSTORE, led).map_err(|e| e.to_string())
-    })?;
-    println!(
-        "{}: brightness {}/255 ({}%) on LED {led:#04x}",
-        def.name, value, value as usize * 100 / 255
-    );
-    Ok(())
+    })
 }
 
-pub fn cmd_polling(api: &HidApi, registry: &Registry, pid: u16, hz: u16) -> Result<(), String> {
-    let (device, def) = open_device(api, registry, pid)?;
+pub fn cmd_polling(device: &Device, def: &DeviceDef, hz: u16) -> Result<(), String> {
     if !def.capabilities.polling_rate {
         return Err(format!("{} does not support polling rate", def.name));
     }
     with_retry(3, "set polling", || {
         device.set_polling_rate(hz).map_err(|e| e.to_string())
-    })?;
-    println!("{}: set polling rate {hz} Hz", def.name);
-    Ok(())
+    })
 }
 
-pub fn cmd_get_polling(api: &HidApi, registry: &Registry, pid: u16) -> Result<(), String> {
-    let (device, def) = open_device(api, registry, pid)?;
+pub fn cmd_get_polling(device: &Device, def: &DeviceDef) -> Result<u16, String> {
     if !def.capabilities.polling_rate {
         return Err(format!("{} does not support polling rate", def.name));
     }
     match with_retry(3, "get polling", || {
         device.get_polling_rate().map_err(|e| e.to_string())
     })? {
-        Some(hz) => println!("{}: polling rate {hz} Hz", def.name),
-        None => println!("{}: polling rate unknown (unrecognized wire code)", def.name),
+        Some(hz) => Ok(hz),
+        None => Err(format!("{}: polling rate unknown (unrecognized wire code)", def.name)),
     }
-    Ok(())
 }
 
-pub fn cmd_battery(api: &HidApi, registry: &Registry, pid: u16) -> Result<(), String> {
-    let (device, def) = open_device(api, registry, pid)?;
+pub struct Battery {
+    pub level: u8,
+    pub charging: bool,
+}
+pub fn cmd_battery(device: &Device, def: &DeviceDef) -> Result<Battery, String> {
     if !def.capabilities.battery {
         return Err(format!("{} does not support battery (wired device)", def.name));
     }
     let level = device.get_battery_level().map_err(|e| e.to_string())?;
     let charging = device.get_charging_status().map_err(|e| e.to_string())?;
-    println!(
-        "{}: battery {level}%{}",
-        def.name,
-        if charging { " (charging)" } else { "" }
-    );
-    Ok(())
+    Ok((Battery { level, charging }))
 }
 
 // =========================================================================
