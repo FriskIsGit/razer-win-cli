@@ -216,7 +216,9 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
         }
         "dpi-stages" => {
             let Some(active_index) = vals.first() else {
-                return Err("Usage: dpi-stages <active index> [stages]".into())
+                let (active_stage, stages) = cmd::cmd_get_dpi_stages(&device, def)?;
+                println!("active_stage:{} stages:{:?}", active_stage, stages);
+                return Ok(());
             };
             let active = active_index.parse::<u8>()
                 .map_err(|e| format!("invalid active index: {e}"))?;

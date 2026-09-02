@@ -184,6 +184,15 @@ pub fn cmd_get_dpi(device: &Device, definition: &DeviceDef) -> Result<(u16, u16)
     Ok((x, y))
 }
 
+pub fn cmd_get_dpi_stages(device: &Device, def: &DeviceDef) -> Result<(u8, Vec<DpiStage>), String> {
+    if !def.capabilities.dpi {
+        return Err(format!("{} does not support DPI", def.name));
+    }
+    with_retry(3, "get DPI stages", || {
+        device.get_dpi_stages(VARSTORE).map_err(|e| e.to_string())
+    }).map_err(|e| e.to_string())
+}
+
 pub fn cmd_dpi_stages(device: &Device, def: &DeviceDef, active: u8, values: &[u16]) -> Result<(), String> {
     if !def.capabilities.dpi {
         return Err(format!("{} does not support DPI", def.name));
@@ -196,6 +205,7 @@ pub fn cmd_dpi_stages(device: &Device, def: &DeviceDef, active: u8, values: &[u1
         .enumerate()
         .map(|(i, &v)| DpiStage { index: i as u8, dpi_x: v, dpi_y: v })
         .collect();
+    println!("{:?}", stages);
     with_retry(3, "set DPI stages", || {
         device.set_dpi_stages(VARSTORE, active, &stages).map_err(|e| e.to_string())
     })?;
