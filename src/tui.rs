@@ -3,7 +3,7 @@ use std::fmt::Write;
 use hidapi::HidApi;
 use razer_hid::{DeviceDef, Registry};
 use crate::cmd;
-use crate::cmd::{cmd_dpi, cmd_get_dpi, cmd_get_polling};
+use crate::cmd::{cmd_dpi, cmd_get_dpi, cmd_get_polling, cmd_polling};
 use crate::inputs::KeyCode;
 
 fn test() {
@@ -66,20 +66,25 @@ enum Action {
     Profiles,
 }
 
+const DPI_X_INDEX: usize = 0;
+const DPI_Y_INDEX: usize = 1;
+const POLLING_TABLE: [u16; 3] = [125, 500, 1000];
+
 pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
     let pid = cmd::auto_detect_pid(&api, &registry)?;
 
     let (device, definition) = cmd::open_device(&api, &registry, pid)?;
 
-    let mut edit_mode = false;
-    let mut index = 0;
-
     let (x, y) = cmd_get_dpi(&device, definition)?;
     let polling = cmd_get_polling(&device, definition)?;
 
-    const DPI_X_INDEX: usize = 0;
-    const DPI_Y_INDEX: usize = 1;
-    const POLLING_INDEX: usize = 2;
+    let mut edit_mode = false;
+    let mut index = 0;
+
+    let mut polling_index = 0;
+    if let Some(current_polling_index) = POLLING_TABLE.iter().position(|p| *p == polling) {
+        polling_index = current_polling_index;
+    }
 
     let mut dpi_x = MenuItem::new("DPI X", Some(x as usize), "", Action::Dpi);
     let mut dpi_y = MenuItem::new("DPI Y", Some(y as usize), "", Action::Dpi);
@@ -112,33 +117,46 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
                 if menu_items[index].is_expandable {
                     continue
                 }
-                let is_dpi = menu_items[index].action == Action::Dpi;
-                if is_dpi {
-                    let dpi_value = menu_items[index].value.expect("DPI must have value");
-                    let mut x = menu_items[DPI_X_INDEX].value.expect("DPI X must have value");
-                    let mut y = menu_items[DPI_Y_INDEX].value.expect("DPI Y must have value");
-                    if dpi_value < DPI_STEP {
-                        continue
+                let action = &menu_items[index].action;
+                match action {
+                    Action::Dpi => {
+                        let dpi_value = menu_items[index].value.expect("DPI must have value");
+                        let mut x = menu_items[DPI_X_INDEX].value.expect("DPI X must have value");
+                        let mut y = menu_items[DPI_Y_INDEX].value.expect("DPI Y must have value");
+                        if dpi_value < DPI_STEP {
+                            continue
+                        }
+                        let new_value = dpi_value - DPI_STEP;
+                        if index == DPI_X_INDEX {
+                            x = new_value;
+                        } else {
+                            y = new_value;
+                        }
+                        // Better handle error to show in UI
+                        match cmd_dpi(&device, definition, x as u16, y as u16) {
+                            Ok(()) => menu_items[index].value = Some(new_value),
+                            Err(_) => continue,
+                        }
                     }
-                    let new_value = dpi_value - DPI_STEP;
-                    if index == DPI_X_INDEX {
-                        x = new_value;
-                    } else {
-                        y = new_value;
+                    Action::Polling => {
+                        if polling_index == 0 {
+                            continue
+                        }
+                        polling_index -= 1;
+                        let new_polling = POLLING_TABLE[polling_index];
+                        match cmd_polling(&device, definition, new_polling) {
+                            Ok(()) => menu_items[index].value = Some(new_polling as usize),
+                            Err(_) => continue,
+                        }
                     }
-                    // Better handle error to show in UI
-                    match cmd_dpi(&device, definition, x as u16, y as u16) {
-                        Ok(()) => menu_items[index].value = Some(new_value),
-                        Err(_) => continue,
-                    }
-                } else if menu_items[index].action == Action::Polling {
-
+                    _  => {}
                 }
+
             }
             KeyCode::ArrowRight => {
                 if menu_items[index].is_expandable { continue; }
-                let is_dpi = menu_items[index].action == Action::Dpi;
-                if is_dpi {
+
+                if menu_items[index].action == Action::Dpi {
                     let dpi_value = menu_items[index].value.expect("DPI must have value");
                     let mut x = menu_items[DPI_X_INDEX].value.expect("DPI X must have value");
                     let mut y = menu_items[DPI_Y_INDEX].value.expect("DPI Y must have value");
@@ -162,7 +180,15 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
                         Err(_) => continue,
                     }
                 } else if menu_items[index].action == Action::Polling {
-
+                    if polling_index >= POLLING_TABLE.len() - 1 {
+                        continue
+                    }
+                    polling_index += 1;
+                    let new_polling = POLLING_TABLE[polling_index];
+                    match cmd_polling(&device, definition, new_polling) {
+                        Ok(()) => menu_items[index].value = Some(new_polling as usize),
+                        Err(_) => continue,
+                    }
                 }
             }
 

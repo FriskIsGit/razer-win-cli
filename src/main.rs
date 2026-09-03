@@ -171,8 +171,13 @@ fn update_lighting_color(settings: &mut DeviceSettings, color: [u8; 3]) {
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     let is_help = args.iter().any(|s| s == "help" || s == "-h" || s == "--help");
+    let is_version = args.iter().any(|s| s == "version" || s == "-v" || s == "--version");
     if is_help {
         println!("{}", usage());
+        return Ok(())
+    }
+    if is_version {
+        println!("{}", version());
         return Ok(())
     }
     let api = HidApi::new().map_err(|e| format!("failed to initialize hidapi: {e}"))?;
@@ -382,6 +387,10 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn version() -> &'static str {
+    return "v-0.1-DEV"
 }
 
 // =========================================================================
