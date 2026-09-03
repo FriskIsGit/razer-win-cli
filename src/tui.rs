@@ -86,11 +86,11 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
         polling_index = current_polling_index;
     }
 
-    let mut dpi_x = MenuItem::new("DPI X", Some(x as usize), "", Action::Dpi);
-    let mut dpi_y = MenuItem::new("DPI Y", Some(y as usize), "", Action::Dpi);
-    let mut polling = MenuItem::new("POLLING (RATE)", Some(polling as usize), "Hz", Action::Polling);
-    let mut lighting = MenuItem::new_expandable("LIGHTING", Action::Lighting);
-    let mut profiles = MenuItem::new_expandable("PROFILES", Action::Profiles);
+    let dpi_x = MenuItem::new("DPI X", Some(x as usize), "", Action::Dpi);
+    let dpi_y = MenuItem::new("DPI Y", Some(y as usize), "", Action::Dpi);
+    let polling = MenuItem::new("POLLING (RATE)", Some(polling as usize), "Hz", Action::Polling);
+    let lighting = MenuItem::new_expandable("LIGHTING", Action::Lighting);
+    let profiles = MenuItem::new_expandable("PROFILES", Action::Profiles);
     let mut menu_items = [dpi_x, dpi_y, polling, lighting, profiles];
 
 
@@ -156,39 +156,44 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
             KeyCode::ArrowRight => {
                 if menu_items[index].is_expandable { continue; }
 
-                if menu_items[index].action == Action::Dpi {
-                    let dpi_value = menu_items[index].value.expect("DPI must have value");
-                    let mut x = menu_items[DPI_X_INDEX].value.expect("DPI X must have value");
-                    let mut y = menu_items[DPI_Y_INDEX].value.expect("DPI Y must have value");
+                let action = &menu_items[index].action;
+                match action {
+                    Action::Dpi => {
+                        let dpi_value = menu_items[index].value.expect("DPI must have value");
+                        let mut x = menu_items[DPI_X_INDEX].value.expect("DPI X must have value");
+                        let mut y = menu_items[DPI_Y_INDEX].value.expect("DPI Y must have value");
 
-                    let mut max_dpi = 45000;
-                    if let Some(dpi_max) = definition.dpi_max {
-                        max_dpi = dpi_max;
-                    };
-                    let new_value = dpi_value + DPI_STEP;
-                    if new_value > max_dpi as usize {
-                        continue
-                    }
-                    if index == DPI_X_INDEX {
-                        x = new_value;
-                    } else {
-                        y = new_value;
-                    }
+                        let mut max_dpi = 45000;
+                        if let Some(dpi_max) = definition.dpi_max {
+                            max_dpi = dpi_max;
+                        };
+                        let new_value = dpi_value + DPI_STEP;
+                        if new_value > max_dpi as usize {
+                            continue
+                        }
+                        if index == DPI_X_INDEX {
+                            x = new_value;
+                        } else {
+                            y = new_value;
+                        }
 
-                    match cmd_dpi(&device, definition, x as u16, y as u16) {
-                        Ok(()) => { menu_items[index].value = Some(new_value); }
-                        Err(_) => continue,
+                        match cmd_dpi(&device, definition, x as u16, y as u16) {
+                            Ok(()) => { menu_items[index].value = Some(new_value); }
+                            Err(_) => continue,
+                        }
                     }
-                } else if menu_items[index].action == Action::Polling {
-                    if polling_index >= POLLING_TABLE.len() - 1 {
-                        continue
+                    Action::Polling => {
+                        if polling_index >= POLLING_TABLE.len() - 1 {
+                            continue
+                        }
+                        polling_index += 1;
+                        let new_polling = POLLING_TABLE[polling_index];
+                        match cmd_polling(&device, definition, new_polling) {
+                            Ok(()) => menu_items[index].value = Some(new_polling as usize),
+                            Err(_) => continue,
+                        }
                     }
-                    polling_index += 1;
-                    let new_polling = POLLING_TABLE[polling_index];
-                    match cmd_polling(&device, definition, new_polling) {
-                        Ok(()) => menu_items[index].value = Some(new_polling as usize),
-                        Err(_) => continue,
-                    }
+                    _ => {}
                 }
             }
 

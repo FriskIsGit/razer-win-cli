@@ -302,7 +302,7 @@ pub fn cmd_battery(device: &Device, def: &DeviceDef) -> Result<Battery, String> 
     }
     let level = device.get_battery_level().map_err(|e| e.to_string())?;
     let charging = device.get_charging_status().map_err(|e| e.to_string())?;
-    Ok((Battery { level, charging }))
+    Ok(Battery { level, charging })
 }
 
 // =========================================================================

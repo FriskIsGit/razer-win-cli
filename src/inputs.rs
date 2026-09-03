@@ -126,7 +126,7 @@ pub(crate) mod windows {
         use std::io::Read;
 
         let mut buffer = [0u8; 3];
-        std::io::stdin().read(&mut buffer);
+        let _ = std::io::stdin().read(&mut buffer);
         return KeyCode::Char(char::from_u32_unchecked(buffer[0] as u32));
     }
 
