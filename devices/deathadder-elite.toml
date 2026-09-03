@@ -16,6 +16,9 @@
 #   device-specific value (daemon mouse.py only publishes DPI_MAX per device).
 # source: LED ids logo 0x04 / scroll 0x01 — OpenRazer razercommon.h.
 # Tested on real hardware (connected via USB on the maintainer's machine).
+# No firmware support for the DPI-stages command (0x04/0x06/0x86); this
+# mouse only supports direct X/Y DPI. Synapse's "sensitivity stages" for
+# this device are emulated by the app rewriting the direct DPI value.
 
 name = "Razer DeathAdder Elite"
 usb_pid = "0x005C"
@@ -29,6 +32,7 @@ matrix_dims = [1, 2]
 [capabilities]
 lighting = true
 dpi = true
+dpi_stages = false
 polling_rate = true
 battery = false
 

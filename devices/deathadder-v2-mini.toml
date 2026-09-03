@@ -26,6 +26,7 @@ matrix_dims = [1, 1]
 [capabilities]
 lighting = true
 dpi = true
+dpi_stages = true
 polling_rate = true
 battery = false
 

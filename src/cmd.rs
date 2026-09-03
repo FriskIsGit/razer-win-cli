@@ -116,6 +116,7 @@ fn get_capabilities(def: &DeviceDef) -> Vec<&str> {
     let mut caps = Vec::new();
     if def.capabilities.lighting { caps.push("lighting"); }
     if def.capabilities.dpi { caps.push("dpi"); }
+    if def.capabilities.dpi_stages { caps.push("dpi-stages"); }
     if def.capabilities.polling_rate { caps.push("polling"); }
     if def.capabilities.battery { caps.push("battery"); }
     if def.capabilities.onboard { caps.push("onboard"); }
@@ -134,9 +135,10 @@ pub fn cmd_info(device: &Device, def: &DeviceDef) -> Result<(), String> {
         def.dpi_max.map(|v| v.to_string()).unwrap_or("?".into()),
     );
     println!(
-        "  Capabilities:   lighting={}, dpi={}, polling={}, battery={}",
+        "  Capabilities:   lighting={}, dpi={}, dpi_stages={}, polling={}, battery={}",
         def.capabilities.lighting,
         def.capabilities.dpi,
+        def.capabilities.dpi_stages,
         def.capabilities.polling_rate,
         def.capabilities.battery
     );
@@ -185,17 +187,17 @@ pub fn cmd_get_dpi(device: &Device, definition: &DeviceDef) -> Result<(u16, u16)
 }
 
 pub fn cmd_get_dpi_stages(device: &Device, def: &DeviceDef) -> Result<(u8, Vec<DpiStage>), String> {
-    if !def.capabilities.dpi {
-        return Err(format!("{} does not support DPI", def.name));
+    if !def.capabilities.dpi_stages {
+        return Err(dpi_stages_unsupported(def));
     }
     with_retry(3, "get DPI stages", || {
         device.get_dpi_stages(VARSTORE).map_err(|e| e.to_string())
-    }).map_err(|e| e.to_string())
+    })
 }
 
 pub fn cmd_dpi_stages(device: &Device, def: &DeviceDef, active: u8, values: &[u16]) -> Result<(), String> {
-    if !def.capabilities.dpi {
-        return Err(format!("{} does not support DPI", def.name));
+    if !def.capabilities.dpi_stages {
+        return Err(dpi_stages_unsupported(def));
     }
     if values.len() < 2 || values.len() > 5 {
         return Err("DPI stages: provide 2-5 values".to_string());
@@ -215,6 +217,17 @@ pub fn cmd_dpi_stages(device: &Device, def: &DeviceDef, active: u8, values: &[u1
         println!("  stage {}: {}x{}{}", s.index, s.dpi_x, s.dpi_y, marker);
     }
     Ok(())
+}
+
+fn dpi_stages_unsupported(def: &DeviceDef) -> String {
+    format!(
+        "{} does not support DPI stages.\n\
+        This mouse's firmware has no DPI-stage table and only \
+        supports direct X/Y DPI (use the `dpi` command instead). \n\
+        The 'sensitivity stages' feature in Razer Synapse on this device is emulated by the app rewriting the direct \
+        DPI value, so it only works while Synapse is running.",
+        def.name
+    )
 }
 
 pub fn cmd_color(device: &Device, def: &DeviceDef, rgb: Rgb, led: u8) -> Result<(), String> {

@@ -35,6 +35,11 @@ pub struct Capabilities {
     pub lighting: bool,
     #[serde(default)]
     pub dpi: bool,
+    /// Whether the device firmware implements the DPI-stages command on mouse itself.
+    // source: OpenRazer daemon hardware/mouse.py per-class METHODS — only
+    // classes listing get_dpi_stages/set_dpi_stages have firmware support.
+    #[serde(default)]
+    pub dpi_stages: bool,
     #[serde(default)]
     pub polling_rate: bool,
     #[serde(default)]
@@ -222,6 +227,7 @@ dpi_max = 20000
 [capabilities]
 lighting = true
 dpi = true
+dpi_stages = true
 polling_rate = true
 battery = false
 
@@ -244,6 +250,7 @@ id = 0x01
         assert_eq!(def.wait_us, 600);
         assert!(def.capabilities.lighting);
         assert!(def.capabilities.dpi);
+        assert!(!def.capabilities.dpi_stages);
         assert!(!def.capabilities.battery);
         assert_eq!(def.led_regions.len(), 2);
         assert_eq!(def.led_regions[0].name, "logo");
@@ -266,6 +273,12 @@ device_type = "keyboard"
         assert_eq!(def.capabilities, Capabilities::default());
         assert!(def.led_regions.is_empty());
         assert_eq!(def.matrix_dims, None);
+    }
+
+    #[test]
+    fn dpi_stages_flag_parses() {
+        let mut def = Registry::parse_def(SAMPLE).expect("parse");
+        assert!(def.capabilities.dpi_stages);
     }
 
     #[test]
