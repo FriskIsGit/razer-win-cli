@@ -508,7 +508,7 @@ fn draw_lighting_color_bar(s: &mut String, color: [u8; 3]) {
     let label = "Color: ";
     let rgb = format!(" RGB({}, {}, {})", color[0], color[1], color[2]);
     let bar_width = WIDTH - 1 - label.len() - rgb.len();
-    let bar = "█".repeat(bar_width);
+    let bar = " ".repeat(bar_width);
     let bg = format!("\x1b[48;2;{};{};{}m", color[0], color[1], color[2]);
     let reset = "\x1b[0m";
     s.push(VERTICAL);
