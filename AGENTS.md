@@ -12,7 +12,7 @@ Don’t default to hacky workarounds just to force a result.
 3. Don't create random scripts unless explicitly asked.
 4. Don't try to run the program or run tests unless explicitly asked.
 5. When asked to verify a code path read the code and analyze instead of executing the program.
-6. Use clean, descriptive, self-explanatory function and variable names (prefer camelCase). Watch out for JSON fields which are usually snake_case.
+6. Use clean, descriptive, self-explanatory function and variable names. Watch out for JSON fields which are usually snake_case.
 7. Prefer native tooling for reading, writing, editing files rather than using `cat` or `sed`.
 8. After completing a bug fix or feature implementation, suggest a concise commit message the user could use.
 9. Never introduce new dependencies without explicit user approval. If a dependency is required, justify its necessity over standard library solutions.
@@ -289,3 +289,64 @@ fn parse_num(raw: Option<&String>) -> Result<usize, String> {
 parse_num(vals.get(4))?;
 
 ```
+
+## Do not derive logic from incidental constant values
+Do not use arithmetic or ordering assumptions based on the current numeric values of constants to determine program behavior. 
+Constants may be changed, reordered, or reassigned later without the dependent logic being obvious.
+Use an explicit mapping between the external value and its semantic meaning.
+
+```rs
+const UI_ROW_INDEX_COLOR_R: usize = 1;
+const UI_ROW_INDEX_COLOR_G: usize = 2;
+const UI_ROW_INDEX_COLOR_B: usize = 3;
+
+// Bad - assumes the color-row constants are consecutive and start at 1.
+// Changing their values can silently select the wrong color channel.
+
+UI_ROW_INDEX_COLOR_R | UI_ROW_INDEX_COLOR_G | UI_ROW_INDEX_COLOR_B => {
+    let channel_index = index - UI_ROW_INDEX_COLOR_R;
+    let channel = color[channel_index];
+}
+```
+
+```rs
+// Good - explicitly maps each row to its color-array position.
+// The mapping remains correct if the row constants change.
+
+UI_ROW_INDEX_COLOR_R | UI_ROW_INDEX_COLOR_G | UI_ROW_INDEX_COLOR_B => {
+    let channel = match index {
+        UI_ROW_INDEX_COLOR_R => 0,
+        UI_ROW_INDEX_COLOR_G => 1,
+        UI_ROW_INDEX_COLOR_B => 2,
+        _ => unreachable!("index was matched as a color row"),
+    };
+    let channel_value = color[channel];
+}
+```
+Do not infer meaning from incidental properties such as:
+numeric values, ordering, adjacency, string formats, bit patterns, or declaration order
+unless that relationship is an explicit, enforced part of the design. 
+Prefer named mappings, exhaustive match expressions, or enums.
+
+## Wrap comments at semantic boundaries
+Wrap comments and documentation comments at sentence or clause boundaries, not at an arbitrary character count. 
+Prefer wrapping after a period, comma, semicolon, colon, or another natural grammatical break. 
+Do not split a sentence in the middle of a phrase merely to fit a line length.
+Keep comment lines within the project’s configured line-length guide when possible, 
+but preserve readability and meaning over rigid wrapping.
+
+```rs
+// Good ✅ - each line ends at a complete sentence.
+/// The garden is quiet in the early morning.
+/// Birds gather near the old stone wall.
+
+// Good ✅ - the line wraps at a natural clause boundary.
+/// The garden is quiet in the early morning, especially before
+/// the surrounding streets become busy.
+
+// Bad ❌ - the sentence is split in the middle of a phrase.
+/// The garden is quiet in the early morning. Birds gather near the
+/// old stone wall.
+```
+Do not add trailing whitespace to comment lines.
+
