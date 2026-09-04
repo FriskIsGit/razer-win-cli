@@ -239,6 +239,40 @@ pub fn cmd_color(device: &Device, def: &DeviceDef, rgb: Rgb, led: u8) -> Result<
     })
 }
 
+/// Send a lighting effect to the device. Uses NOSTORE (volatile) storage.
+fn set_effect(device: &Device, effect: Effect, led: u8, color: Rgb) -> Result<(), String> {
+    with_retry(3, "set effect", || {
+        match effect {
+            Effect::Static => device.set_static_color(NOSTORE, led, color),
+            Effect::Breathing => device.set_effect_breathing_single(NOSTORE, led, color),
+            Effect::Spectrum => device.set_effect_spectrum(NOSTORE, led),
+            Effect::Wave => device.set_effect_wave(NOSTORE, led, 0x01),
+            Effect::Reactive => device.set_effect_reactive(NOSTORE, led, 0x02, color),
+            Effect::Off => device.set_effect_none(NOSTORE, led),
+        }.map_err(|e| e.to_string())
+    })
+}
+
+/// TODO: Review whether lighting can persist
+/// Apply a lighting effect and brightness to an already-open device.
+/// Lighting is volatile (NOSTORE) and resets when the device powers off.
+pub fn apply_lighting(
+    device: &Device,
+    def: &DeviceDef,
+    effect: Effect,
+    color: Rgb,
+    led: u8,
+    brightness: u8,
+) -> Result<(), String> {
+    if !def.capabilities.lighting {
+        return Err(format!("{} does not support lighting", def.name));
+    }
+    set_effect(device, effect, led, color)?;
+    with_retry(3, "set brightness", || {
+        device.set_brightness(NOSTORE, led, brightness).map_err(|e| e.to_string())
+    })
+}
+
 pub fn cmd_effect(
     api: &HidApi,
     registry: &Registry,
@@ -251,17 +285,7 @@ pub fn cmd_effect(
     if !def.capabilities.lighting {
         return Err(format!("{} does not support lighting", def.name));
     }
-    with_retry(3, "set effect", || {
-        match effect {
-            Effect::Static => device.set_static_color(NOSTORE, led, rgb),
-            Effect::Breathing => device.set_effect_breathing_single(NOSTORE, led, rgb),
-            Effect::Spectrum => device.set_effect_spectrum(NOSTORE, led),
-            Effect::Wave => device.set_effect_wave(NOSTORE, led, 0x01),
-            Effect::Reactive => device.set_effect_reactive(NOSTORE, led, 0x02, rgb),
-            Effect::Off => device.set_effect_none(NOSTORE, led),
-        }
-            .map_err(|e| e.to_string())
-    })?;
+    set_effect(&device, effect, led, rgb)?;
     println!("{}: set effect {:?} on LED {led:#04x}", def.name, effect);
     Ok(())
 }
@@ -475,6 +499,17 @@ pub fn cmd_profile_delete(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// TODO: Review
+/// Load the saved profile `name` and apply the settings for device `pid`
+/// to the already-open device.
+pub fn apply_profile(device: &Device, def: &DeviceDef, pid: u16, name: &str) -> Result<(), String> {
+    let profile = load_profile(name)?;
+    let Some(entry) = profile.devices.iter().find(|entry| entry.id == pid) else {
+        return Err(format!("profile {name:?} has no settings for {pid:#06x}"));
+    };
+    apply_settings(device, def, &entry.settings)
+}
+
 // =========================================================================
 // Profile store
 // =========================================================================
@@ -518,7 +553,7 @@ fn save_profile(profile: &Profile) -> Result<(), String> {
         .map_err(|e| format!("write {}: {e}", path.display()))
 }
 
-fn load_profile(name: &str) -> Result<Profile, String> {
+pub fn load_profile(name: &str) -> Result<Profile, String> {
     let path = profile_path(name)?;
 
     let src = read_to_string(&path)
@@ -527,7 +562,7 @@ fn load_profile(name: &str) -> Result<Profile, String> {
         .map_err(|e| format!("parse {}: {e}", path.display()))
 }
 
-fn list_profiles() -> Vec<String> {
+pub fn list_profiles() -> Vec<String> {
     let dir = profiles_dir();
     let Ok(entries) = read_dir(&dir) else {
         return Vec::new();
@@ -657,14 +692,7 @@ fn apply_settings(device: &Device, def: &DeviceDef, settings: &DeviceSettings) -
 
     if def.capabilities.lighting {
         if let Some(l) = settings.lighting {
-            match l.effect {
-                Effect::Static => device.set_static_color(NOSTORE, led, l.color),
-                Effect::Breathing => device.set_effect_breathing_single(NOSTORE, led, l.color),
-                Effect::Spectrum => device.set_effect_spectrum(NOSTORE, led),
-                Effect::Wave => device.set_effect_wave(NOSTORE, led, 0x01),
-                Effect::Reactive => device.set_effect_reactive(NOSTORE, led, 0x02, l.color),
-                Effect::Off => device.set_effect_none(NOSTORE, led),
-            }
+            set_effect(device, l.effect, led, l.color)
                 .map_err(|e| format!("set lighting effect: {e}"))?;
 
             device.set_brightness(NOSTORE, led, l.brightness)
