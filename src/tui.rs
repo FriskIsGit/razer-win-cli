@@ -275,7 +275,7 @@ fn start_profiles_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
     loop {
         crate::inputs::clear_console();
 
-        draw_profiles_ui(buffer, definition, &profiles, index, &status);
+        draw_profiles_ui(buffer, &profiles, index, &status);
         println!("{buffer}");
         buffer.clear();
 
@@ -317,7 +317,7 @@ fn start_lighting_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
     loop {
         crate::inputs::clear_console();
 
-        draw_lighting_ui(buffer, definition, index, &state, &status);
+        draw_lighting_ui(buffer, index, &state, &status);
         println!("{buffer}");
         buffer.clear();
 
@@ -446,9 +446,9 @@ fn adjust_lighting(
     }
 }
 
-fn draw_lighting_ui(buffer: &mut String, definition: &DeviceDef, index: usize, state: &LightingState, status: &Option<String>) {
+fn draw_lighting_ui(buffer: &mut String, index: usize, state: &LightingState, status: &Option<String>) {
     draw_top(buffer);
-    box_content(buffer, &definition.name);
+    box_content(buffer, "< BACK");
     draw_separator(buffer);
     draw_lighting_color_bar(buffer, state.color);
     draw_separator(buffer);
@@ -566,9 +566,9 @@ fn profile_summary_for(profile: &Profile, pid: u16) -> String {
     }
 }
 
-fn draw_profiles_ui(buffer: &mut String, definition: &DeviceDef, profiles: &[ProfileEntry], index: usize, status: &Option<String>) {
+fn draw_profiles_ui(buffer: &mut String, profiles: &[ProfileEntry], index: usize, status: &Option<String>) {
     draw_top(buffer);
-    box_content(buffer, &definition.name);
+    box_content(buffer, "< BACK");
     draw_separator(buffer);
     if profiles.is_empty() {
         box_content(buffer, "(no saved profiles)");
