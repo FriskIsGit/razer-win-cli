@@ -499,10 +499,9 @@ pub fn cmd_profile_delete(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// TODO: Review
-/// Load the saved profile `name` and apply the settings for device `pid`
-/// to the already-open device.
-pub fn apply_profile(device: &Device, def: &DeviceDef, pid: u16, name: &str) -> Result<(), String> {
+/// Load the saved profile `name` and apply the settings for device `pid` to the opened device.
+pub fn apply_profile(device: &Device, def: &DeviceDef, name: &str) -> Result<(), String> {
+    let pid = def.usb_pid;
     let profile = load_profile(name)?;
     let Some(entry) = profile.devices.iter().find(|entry| entry.id == pid) else {
         return Err(format!("profile {name:?} has no settings for {pid:#06x}"));

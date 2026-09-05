@@ -350,3 +350,23 @@ but preserve readability and meaning over rigid wrapping.
 ```
 Do not add trailing whitespace to comment lines.
 
+## Don't duplicate parameters that are already readily available from another argument
+If a function receives a struct or object containing a required value, 
+access that value from the existing argument instead of passing it separately. 
+Only pass the value independently when it is intentionally allowed to differ from the value in the containing argument.
+```rs
+struct Definition {
+    name: String,
+    id: u16,
+}
+
+// Bad: `id` is already available through `definition`.
+fn apply_set(definition: &Definition, id: u16) {
+    // ...
+}
+
+// Good: use the existing value from `definition`.
+fn apply_set(definition: &Definition) {
+    let id = definition.id;
+}
+```

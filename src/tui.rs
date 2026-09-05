@@ -139,9 +139,8 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
                         }
                         polling_index -= 1;
                         let new_polling = POLLING_TABLE[polling_index];
-                        match cmd_polling(&device, definition, new_polling) {
-                            Ok(()) | Err(_) => menu_items[index].value = new_polling.to_string() + " Hz",
-                        }
+                        let _ = cmd_polling(&device, definition, new_polling);
+                        menu_items[index].value = new_polling.to_string() + " Hz";
                     }
                     _  => {}
                 }
@@ -172,10 +171,8 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
                         }
                         polling_index += 1;
                         let new_polling = POLLING_TABLE[polling_index];
-                        match cmd_polling(&device, definition, new_polling) {
-                            Ok(()) => menu_items[index].value = new_polling.to_string() + " Hz",
-                            Err(_) => continue,
-                        }
+                        let _ = cmd_polling(&device, definition, new_polling);
+                        menu_items[index].value = new_polling.to_string() + " Hz";
                     }
                     _ => {}
                 }
@@ -286,7 +283,7 @@ fn start_profiles_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
                     continue;
                 }
                 let name = &profiles[index].name;
-                match apply_profile(device, definition, pid, name) {
+                match apply_profile(device, definition, name) {
                     Ok(()) => status = Some(format!("applied {name:?}")),
                     Err(e) => status = Some(format!("failed to apply {name:?}: {e}")),
                 }
