@@ -60,15 +60,6 @@ const LIGHTING_ROW_BRIGHTNESS: usize = 4;
 const LIGHTING_ROWS: usize = 5;
 const LIGHTING_STEP: i8 = 16;
 
-const EFFECTS: [Effect; 6] = [
-    Effect::Static,
-    Effect::Breathing,
-    Effect::Spectrum,
-    Effect::Wave,
-    Effect::Reactive,
-    Effect::None,
-];
-
 fn effect_name(effect: Effect) -> &'static str {
     match effect {
         Effect::None => "Off",
@@ -359,16 +350,16 @@ impl LightingState {
 }
 
 /// Step the selected lighting row by one step or return LightingState unchanged.
-fn step_lighting_row(index: usize, delta: i8, state: &LightingState) -> LightingState {
+fn step_lighting_row(index: usize, delta: i8, state: &LightingState, effects: &Vec<Effect>) -> LightingState {
     match index {
         LIGHTING_ROW_EFFECT => {
-            let current = effect_index(state.effect) as isize;
+            let current = effect_index(effects, state.effect) as isize;
             let mut next_index = current + delta.signum() as isize;
-            if next_index < 0 || next_index >= EFFECTS.len() as isize {
+            if next_index < 0 || next_index >= effects.len() as isize {
                 next_index = current;
             }
             LightingState {
-                effect: EFFECTS[next_index as usize],
+                effect: effects[next_index as usize],
                 color: state.color,
                 brightness: state.brightness,
             }
@@ -398,8 +389,8 @@ fn step_lighting_row(index: usize, delta: i8, state: &LightingState) -> Lighting
     }
 }
 
-fn effect_index(effect: Effect) -> usize {
-    EFFECTS.iter().position(|e| *e == effect).unwrap_or(0)
+fn effect_index(effects: &Vec<Effect>, effect: Effect) -> usize {
+    effects.iter().position(|e| *e == effect).unwrap_or(0)
 }
 
 fn step_u8(value: u8, delta: i8) -> u8 {
@@ -417,7 +408,7 @@ fn adjust_lighting(
     state: &mut LightingState,
     status: &mut Option<String>,
 ) {
-    let new_state = step_lighting_row(index, delta, state);
+    let new_state = step_lighting_row(index, delta, state, &definition.lighting_effects);
     if new_state == *state {
         return;
     }

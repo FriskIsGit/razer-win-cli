@@ -160,6 +160,9 @@ pub struct DeviceDef {
     /// Matrix dimensions `[rows, cols]`, if the device is addressable-RGB.
     #[serde(default)]
     pub matrix_dims: Option<[u16; 2]>,
+    /// The supported lighting effects
+    #[serde(default)]
+    pub lighting_effects: Vec<Effect>,
     /// Minimum DPI.
     #[serde(default)]
     pub dpi_min: Option<u16>,
