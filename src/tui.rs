@@ -66,17 +66,19 @@ const EFFECTS: [Effect; 6] = [
     Effect::Spectrum,
     Effect::Wave,
     Effect::Reactive,
-    Effect::Off,
+    Effect::None,
 ];
 
 fn effect_name(effect: Effect) -> &'static str {
     match effect {
+        Effect::None => "Off",
         Effect::Static => "Static",
         Effect::Breathing => "Breathing",
         Effect::Spectrum => "Spectrum",
         Effect::Wave => "Wave",
         Effect::Reactive => "Reactive",
-        Effect::Off => "Off",
+        Effect::Starlight => "Starlight",
+        Effect::Custom => "custom",
     }
 }
 

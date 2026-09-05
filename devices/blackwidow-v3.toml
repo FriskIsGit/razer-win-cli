@@ -11,6 +11,8 @@ device_type = "keyboard"
 transaction_id = "0x1f"
 wait_us = 600
 matrix_dims = [6, 22]
+lighting_effects = ["static", "breathing", "spectrum", "wave", "reactive", "none"]
+# TODO starlight, custom
 
 [capabilities]
 lighting = true

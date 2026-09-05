@@ -28,6 +28,7 @@ wait_us = 600
 dpi_min = 100
 dpi_max = 16000
 matrix_dims = [1, 2]
+lighting_effects = ["static", "breathing", "spectrum", "reactive", "none"]
 
 [capabilities]
 lighting = true

@@ -70,6 +70,37 @@ pub struct LedRegion {
     pub id: u8,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Effect {
+    #[serde(alias = "off")]
+    None,
+
+    Static,
+    Breathing,
+    Spectrum,
+    Wave,
+    Reactive,
+    Starlight,
+    Custom,
+}
+
+impl Effect {
+    pub fn parse(s: &str) -> Result<Self, String> {
+        match s.to_lowercase().as_str() {
+            "static" => Ok(Effect::Static),
+            "breathing" => Ok(Effect::Breathing),
+            "spectrum" => Ok(Effect::Spectrum),
+            "wave" => Ok(Effect::Wave),
+            "reactive" => Ok(Effect::Reactive),
+            "starlight" => Ok(Effect::Starlight),
+            "custom" => Ok(Effect::Custom),
+            "none" | "off" => Ok(Effect::None),
+            other => Err(format!("unknown effect {other:?})")),
+        }
+    }
+}
+
 /// Hex string (`"0x0084"` or `"0084"`) deserialized into a `u16` PID / `u8` tid.
 mod hex_num {
     use serde::{Deserialize, Deserializer};

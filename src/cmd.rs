@@ -243,12 +243,13 @@ pub fn cmd_color(device: &Device, def: &DeviceDef, rgb: Rgb, led: u8) -> Result<
 fn set_effect(device: &Device, effect: Effect, led: u8, color: Rgb) -> Result<(), String> {
     with_retry(3, "set effect", || {
         match effect {
+            Effect::None => device.set_effect_none(NOSTORE, led),
             Effect::Static => device.set_static_color(NOSTORE, led, color),
             Effect::Breathing => device.set_effect_breathing_single(NOSTORE, led, color),
             Effect::Spectrum => device.set_effect_spectrum(NOSTORE, led),
             Effect::Wave => device.set_effect_wave(NOSTORE, led, 0x01),
             Effect::Reactive => device.set_effect_reactive(NOSTORE, led, 0x02, color),
-            Effect::Off => device.set_effect_none(NOSTORE, led),
+            Effect::Starlight | Effect::Custom => todo!(),
         }.map_err(|e| e.to_string())
     })
 }

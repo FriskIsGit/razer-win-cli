@@ -14,6 +14,8 @@ wait_us = 600
 dpi_min = 100
 dpi_max = 26000
 matrix_dims = [1, 11]
+lighting_effects = ["static", "breathing", "spectrum", "wave", "reactive", "none"]
+# TODO starlight, custom
 
 [capabilities]
 lighting = true

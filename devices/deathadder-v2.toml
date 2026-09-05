@@ -16,6 +16,8 @@ transaction_id = "0x3f"
 wait_us = 600
 dpi_min = 100
 dpi_max = 20000
+lighting_effects = ["static", "breathing", "spectrum", "reactive", "none"]
+# TODO custom
 
 [capabilities]
 lighting = true

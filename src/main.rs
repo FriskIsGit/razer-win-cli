@@ -15,35 +15,10 @@ use razer_hid::{DeviceDef, Registry};
 // =========================================================================
 
 use serde::{Deserialize, Serialize};
+use razer_hid::registry::Effect;
 use crate::cmd::open_device;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum Effect {
-    Static,
-    Breathing,
-    Spectrum,
-    Wave,
-    Reactive,
-    #[serde(rename = "none")]
-    Off,
-}
 
-impl Effect {
-    fn parse(s: &str) -> Result<Self, String> {
-        match s.to_lowercase().as_str() {
-            "static" => Ok(Effect::Static),
-            "breathing" => Ok(Effect::Breathing),
-            "spectrum" => Ok(Effect::Spectrum),
-            "wave" => Ok(Effect::Wave),
-            "reactive" => Ok(Effect::Reactive),
-            "none" | "off" => Ok(Effect::Off),
-            other => Err(format!(
-                "unknown effect {other:?} (expected static, breathing, spectrum, wave, reactive, none)"
-            )),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 struct LightingSettings {
