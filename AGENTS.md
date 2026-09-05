@@ -16,6 +16,35 @@ Don’t default to hacky workarounds just to force a result.
 7. Prefer native tooling for reading, writing, editing files rather than using `cat` or `sed`.
 8. After completing a bug fix or feature implementation, suggest a concise commit message the user could use.
 9. Never introduce new dependencies without explicit user approval. If a dependency is required, justify its necessity over standard library solutions.
+10. Use only printable ASCII characters in source-code comments.
+
+## Code Documentation Guidelines
+
+### Comment Only When Necessary
+
+Write comments only when code is **vague, counterintuitive, or implements unexpected behavior**.
+Do not comment routine logic, function signatures, or branches already explained by a header comment.
+Do no write inline comments for individual statements or conditions.
+
+### Derive from Logic Alone
+Comments must reflect **what the code actually does**, not what someone claims it does or what the conversation suggested.
+
+### Document Code Behavior, Not History
+
+Don't explain why a choice was made unless the code itself would otherwise appear buggy or incorrect.
+Never narrate how the code came to be:
+- Don't say "this was a bug that was fixed by..."
+- Don't say "this handles an edge case where..."
+- Don't justify past decisions
+
+Document **what the code does** based on its logic alone—completely independent of conversation context or implementation history.
+
+### Keep Comments Concise
+
+- One or two sentences maximum
+- No bloat
+- No essays
+- If it needs extensive explanation, refactor the code instead
 
 ## Extract repetitive logic used 3 or more times
 ```rs

@@ -1,9 +1,12 @@
 # Razer CLI for Windows
 
-A self-contained CLI for controlling Razer device settings 
-(DPI, RGB lighting, polling rate, profiles) directly over USB HID on Windows. 
-The `razer-hid` protocol library is vendored **unmodified** under `crates/razer-hid/`.
-The `hidapi-rs` bindings library is vendored **modified** under `crates/hidapi-rs/`.
+A self-contained CLI for controlling Razer device settings—DPI, RGB lighting, polling rate, and profiles—directly over USB HID on Windows.
+
+The **razer-hid** protocol library is vendored under `crates/razer-hid` with minimal modifications 
+to its configuration structure to support additional configuration values. 
+
+The **hidapi-rs** bindings library is vendored under `crates/hidapi-rs` with a minimal compatibility modification 
+replacing `GetOverlappedResultEx` with `GetOverlappedResult` for broader Windows compatibility.
 
 ## Building
 Prerequisite: [Rust](https://www.rust-lang.org/tools/install)
