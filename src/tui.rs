@@ -85,28 +85,14 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
 
     let (device, definition) = cmd::open_device(&api, &registry, pid)?;
 
-    let (mut x, mut y) = cmd_get_dpi(&device, definition)?;
-    let polling = cmd_get_polling(&device, definition)?;
+    let (mut x, mut y) = cmd_get_dpi(&device, definition).unwrap_or_default();
+    let polling = cmd_get_polling(&device, definition).unwrap_or_default();
+    let mut polling_index = POLLING_TABLE.iter().position(|p| *p == polling).unwrap_or_default();
+
+    let mut menu_items = build_menu_items(definition, x, y, polling);
 
     let mut edit_mode = false;
-    let mut index = 0;
-
-    let mut polling_index = 0;
-    if let Some(current_polling_index) = POLLING_TABLE.iter().position(|p| *p == polling) {
-        polling_index = current_polling_index;
-    }
-
-    let mut show = definition.capabilities.dpi;
-    let dpi_x = UiRow::new_with_visibility("DPI X", x.to_string(), show);
-    let dpi_y = UiRow::new_with_visibility("DPI Y", y.to_string(), show);
-
-    show = definition.capabilities.polling_rate;
-    let polling = UiRow::new_with_visibility("POLLING (RATE)", polling.to_string() + " Hz", show);
-    let lighting = UiRow::new("LIGHTING", ">".into());
-    let profiles = UiRow::new("PROFILES", ">".into());
-    let mut menu_items = [dpi_x, dpi_y, polling, lighting, profiles];
-
-
+    let mut index = first_index(&menu_items);
     let mut buffer = String::with_capacity(1500);
     loop {
         crate::inputs::clear_console();
@@ -215,6 +201,29 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn build_menu_items(definition: &DeviceDef, x: u16, y: u16, polling: u16) -> [UiRow; 5] {
+    let mut show = definition.capabilities.dpi;
+    let dpi_x = UiRow::new_with_visibility("DPI X", x.to_string(), show);
+    let dpi_y = UiRow::new_with_visibility("DPI Y", y.to_string(), show);
+
+    show = definition.capabilities.polling_rate;
+    let polling_row = UiRow::new_with_visibility("POLLING (RATE)", polling.to_string() + " Hz", show);
+
+    show = definition.capabilities.lighting;
+    let lighting = UiRow::new_with_visibility("LIGHTING", ">".into(), show);
+    let profiles = UiRow::new("PROFILES", ">".into());
+    return [dpi_x, dpi_y, polling_row, lighting, profiles];
+}
+
+fn first_index(rows: &[UiRow]) -> usize {
+    for (i, item) in rows.iter().enumerate() {
+        if item.visible {
+            return i
+        }
+    }
+    0
 }
 
 fn next_row_index_up(rows: &[UiRow], index: usize) -> usize {
@@ -574,18 +583,21 @@ fn draw_options(s: &mut String, index: usize, items: &[UiRow; 5], _edit_mode: bo
     // Find widest item
     let mut max_length = 0;
     for item in items {
-        max_length = max(item.name.len(), max_length);
+        if item.visible {
+            max_length = max(item.name.len(), max_length);
+        }
     }
     let mut content = String::new();
     for (i, item) in items.iter().enumerate() {
+        if !item.visible {
+            continue
+        }
         if i == index {
             content.push_str(" > ");
         } else {
             content.push_str("   ");
         }
-        if !item.visible {
-            continue
-        }
+
         content.push_str(&format!("{:<max_length$}", &item.name));
         // add 4 separators for visibility
         content.push_str("    ");
