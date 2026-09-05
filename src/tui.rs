@@ -40,38 +40,16 @@ const RIGHT_T: char = '┤';
 const HORIZONTAL: char = '─';
 const VERTICAL: char = '│';
 const WIDTH: usize = 48;
-const DPI_STEP: usize = 50;
-
-struct MenuItem {
-    name: String,
-    value: Option<usize>,
-    unit: Option<String>,
-    is_expandable: bool,
-    action: Action,
-}
-
-impl MenuItem {
-    fn new(name: &str, value: Option<usize>, unit: &str, action: Action) -> Self {
-        Self { name: name.into(), value, unit: Some(unit.into()), is_expandable: false, action}
-    }
-
-    fn new_expandable(name: &str, action: Action) -> Self {
-        Self { name: name.into(), value: None, unit: None, is_expandable: true, action }
-    }
-}
-
-#[derive(PartialEq, Eq)]
-enum Action {
-    Noop,
-    Dpi,
-    Polling,
-    Brightness,
-    Lighting,
-    Profiles,
-}
+const DPI_STEP: u16 = 50;
 
 const DPI_X_INDEX: usize = 0;
 const DPI_Y_INDEX: usize = 1;
+const POLLING_INDEX: usize = 2;
+const LIGHTING_INDEX: usize = 3;
+const PROFILES_INDEX: usize = 4;
+
+const MAIN_MENU_ROWS: usize = 5;
+
 const POLLING_TABLE: [u16; 3] = [125, 500, 1000];
 
 const LIGHTING_ROW_EFFECT: usize = 0;
@@ -107,7 +85,7 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
 
     let (device, definition) = cmd::open_device(&api, &registry, pid)?;
 
-    let (x, y) = cmd_get_dpi(&device, definition)?;
+    let (mut x, mut y) = cmd_get_dpi(&device, definition)?;
     let polling = cmd_get_polling(&device, definition)?;
 
     let mut edit_mode = false;
@@ -118,11 +96,14 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
         polling_index = current_polling_index;
     }
 
-    let dpi_x = MenuItem::new("DPI X", Some(x as usize), "", Action::Dpi);
-    let dpi_y = MenuItem::new("DPI Y", Some(y as usize), "", Action::Dpi);
-    let polling = MenuItem::new("POLLING (RATE)", Some(polling as usize), "Hz", Action::Polling);
-    let lighting = MenuItem::new_expandable("LIGHTING", Action::Lighting);
-    let profiles = MenuItem::new_expandable("PROFILES", Action::Profiles);
+    let mut show = definition.capabilities.dpi;
+    let dpi_x = UiRow::new_with_visibility("DPI X", x.to_string(), show);
+    let dpi_y = UiRow::new_with_visibility("DPI Y", y.to_string(), show);
+
+    show = definition.capabilities.polling_rate;
+    let polling = UiRow::new_with_visibility("POLLING (RATE)", polling.to_string() + " Hz", show);
+    let lighting = UiRow::new("LIGHTING", ">".into());
+    let profiles = UiRow::new("PROFILES", ">".into());
     let mut menu_items = [dpi_x, dpi_y, polling, lighting, profiles];
 
 
@@ -141,44 +122,39 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
                 break;
             }
             KeyCode::ArrowUp | KeyCode::Char('w') | KeyCode::Char('W') => {
-                if index > 0 {
-                    index -= 1;
-                }
+                index = next_row_index_up(&menu_items, index);
             }
             KeyCode::ArrowLeft => {
-                if menu_items[index].is_expandable {
-                    continue
-                }
-                let action = &menu_items[index].action;
-                match action {
-                    Action::Dpi => {
-                        let dpi_value = menu_items[index].value.expect("DPI must have value");
-                        let mut x = menu_items[DPI_X_INDEX].value.expect("DPI X must have value");
-                        let mut y = menu_items[DPI_Y_INDEX].value.expect("DPI Y must have value");
-                        if dpi_value < DPI_STEP {
-                            continue
+                match index {
+                    DPI_X_INDEX | DPI_Y_INDEX => {
+                        let dpi_value = match index {
+                            DPI_X_INDEX => &mut x,
+                            DPI_Y_INDEX => &mut y,
+                            _ => unreachable!("matched earlier"),
+                        };
+                        let min_dpi = definition.dpi_min.unwrap_or(100);
+                        if *dpi_value < DPI_STEP {
+                            continue;
                         }
-                        let new_value = dpi_value - DPI_STEP;
-                        if index == DPI_X_INDEX {
-                            x = new_value;
+                        if *dpi_value - DPI_STEP < min_dpi {
+                            *dpi_value = min_dpi;
                         } else {
-                            y = new_value;
+                            *dpi_value -= DPI_STEP;
                         }
+                        let new_value = *dpi_value;
                         // Better handle error to show in UI
-                        match cmd_dpi(&device, definition, x as u16, y as u16) {
-                            Ok(()) => menu_items[index].value = Some(new_value),
-                            Err(_) => continue,
+                        match cmd_dpi(&device, definition, x, y) {
+                            Ok(()) | Err(_) => menu_items[index].value = new_value.to_string(),
                         }
                     }
-                    Action::Polling => {
+                    POLLING_INDEX => {
                         if polling_index == 0 {
                             continue
                         }
                         polling_index -= 1;
                         let new_polling = POLLING_TABLE[polling_index];
                         match cmd_polling(&device, definition, new_polling) {
-                            Ok(()) => menu_items[index].value = Some(new_polling as usize),
-                            Err(_) => continue,
+                            Ok(()) | Err(_) => menu_items[index].value = new_polling.to_string() + " Hz",
                         }
                     }
                     _  => {}
@@ -186,42 +162,32 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
 
             }
             KeyCode::ArrowRight => {
-                if menu_items[index].is_expandable { continue; }
-
-                let action = &menu_items[index].action;
-                match action {
-                    Action::Dpi => {
-                        let dpi_value = menu_items[index].value.expect("DPI must have value");
-                        let mut x = menu_items[DPI_X_INDEX].value.expect("DPI X must have value");
-                        let mut y = menu_items[DPI_Y_INDEX].value.expect("DPI Y must have value");
-
-                        let mut max_dpi = 45000;
-                        if let Some(dpi_max) = definition.dpi_max {
-                            max_dpi = dpi_max;
+                match index {
+                    DPI_X_INDEX | DPI_Y_INDEX => {
+                        let dpi_value = match index {
+                            DPI_X_INDEX => &mut x,
+                            DPI_Y_INDEX => &mut y,
+                            _ => unreachable!("matched earlier"),
                         };
-                        let new_value = dpi_value + DPI_STEP;
-                        if new_value > max_dpi as usize {
-                            continue
+                        let max_dpi = definition.dpi_max.unwrap_or(u16::MAX as u32) as u16;
+                        if *dpi_value + DPI_STEP > max_dpi {
+                            continue;
                         }
-                        if index == DPI_X_INDEX {
-                            x = new_value;
-                        } else {
-                            y = new_value;
-                        }
-
-                        match cmd_dpi(&device, definition, x as u16, y as u16) {
-                            Ok(()) => { menu_items[index].value = Some(new_value); }
-                            Err(_) => continue,
+                        *dpi_value += DPI_STEP;
+                        let new_value = *dpi_value;
+                        // Better handle error to show in UI
+                        match cmd_dpi(&device, definition, x, y) {
+                            Ok(()) | Err(_) => { menu_items[index].value = new_value.to_string(); }
                         }
                     }
-                    Action::Polling => {
+                    POLLING_INDEX => {
                         if polling_index >= POLLING_TABLE.len() - 1 {
                             continue
                         }
                         polling_index += 1;
                         let new_polling = POLLING_TABLE[polling_index];
                         match cmd_polling(&device, definition, new_polling) {
-                            Ok(()) => menu_items[index].value = Some(new_polling as usize),
+                            Ok(()) => menu_items[index].value = new_polling.to_string() + " Hz",
                             Err(_) => continue,
                         }
                     }
@@ -230,23 +196,18 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
             }
 
             KeyCode::ArrowDown | KeyCode::Char('s') | KeyCode::Char('S') => {
-                if index < menu_items.len() - 1 {
-                    index += 1;
-                }
+                index = next_row_index_down(&menu_items, index);
             }
             KeyCode::Enter => {
-                let item = &menu_items[index];
-                if item.is_expandable {
-                    match item.action {
-                        Action::Lighting => start_lighting_menu(&device, definition, &mut buffer),
-                        Action::Profiles => start_profiles_menu(&device, definition, &mut buffer),
-                        _ => {}
-                    }
-                } else {
-                    if edit_mode {
+                match index {
+                    LIGHTING_INDEX => start_lighting_menu(&device, definition, &mut buffer),
+                    PROFILES_INDEX => start_profiles_menu(&device, definition, &mut buffer),
+                    _ => {
+                        if edit_mode {
 
+                        }
+                        edit_mode = !edit_mode;
                     }
-                    edit_mode = !edit_mode;
                 }
             }
             _ => {}
@@ -256,7 +217,24 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
     Ok(())
 }
 
-fn draw_ui(buffer: &mut String, definition: &DeviceDef, index: usize, menu_items: &[MenuItem; 5], edit_mode: bool) {
+fn next_row_index_up(rows: &[UiRow], index: usize) -> usize {
+    let len = rows.len();
+    for offset in 1..=len {
+        let candidate = (index + len - offset) % len;
+        if rows[candidate].visible { return candidate; }
+    }
+    index
+}
+
+fn next_row_index_down(rows: &[UiRow], index: usize) -> usize {
+    let len = rows.len();
+    for offset in index+1..len {
+        if rows[offset].visible { return offset; }
+    }
+    index
+}
+
+fn draw_ui(buffer: &mut String, definition: &DeviceDef, index: usize, menu_items: &[UiRow; 5], edit_mode: bool) {
     draw_top(buffer);
     box_content(buffer, &definition.name);
     draw_separator(buffer);
@@ -462,24 +440,28 @@ fn draw_lighting_ui(buffer: &mut String, index: usize, state: &LightingState, st
     draw_bottom(buffer);
 }
 
-struct LightingUiRow {
+struct UiRow {
     pub name: &'static str,
     pub value: String,
+    pub visible: bool,
 }
 
-impl LightingUiRow {
+impl UiRow {
     fn new(name: &'static str, value: String) -> Self {
-        Self { name, value }
+        Self { name, value, visible: true }
+    }
+    fn new_with_visibility(name: &'static str, value: String, visible: bool) -> Self {
+        Self { name, value, visible }
     }
 }
 
 fn draw_lighting_options(s: &mut String, index: usize, state: &LightingState) {
-    let rows: [LightingUiRow; LIGHTING_ROWS] = [
-        LightingUiRow::new("EFFECT", effect_name(state.effect).to_string()),
-        LightingUiRow::new("COLOR R", state.color[0].to_string()),
-        LightingUiRow::new("COLOR G", state.color[1].to_string()),
-        LightingUiRow::new("COLOR B", state.color[2].to_string()),
-        LightingUiRow::new("BRIGHTNESS", state.brightness.to_string()),
+    let rows: [UiRow; LIGHTING_ROWS] = [
+        UiRow::new("EFFECT", effect_name(state.effect).to_string()),
+        UiRow::new("COLOR R", state.color[0].to_string()),
+        UiRow::new("COLOR G", state.color[1].to_string()),
+        UiRow::new("COLOR B", state.color[2].to_string()),
+        UiRow::new("BRIGHTNESS", state.brightness.to_string()),
     ];
     // Find widest item
     let mut max_length = 0;
@@ -588,7 +570,7 @@ fn draw_profiles_ui(buffer: &mut String, profiles: &[ProfileEntry], index: usize
     draw_bottom(buffer);
 }
 
-fn draw_options(s: &mut String, index: usize, items: &[MenuItem; 5], edit_mode: bool) {
+fn draw_options(s: &mut String, index: usize, items: &[UiRow; 5], _edit_mode: bool) {
     // Find widest item
     let mut max_length = 0;
     for item in items {
@@ -601,24 +583,14 @@ fn draw_options(s: &mut String, index: usize, items: &[MenuItem; 5], edit_mode: 
         } else {
             content.push_str("   ");
         }
+        if !item.visible {
+            continue
+        }
         content.push_str(&format!("{:<max_length$}", &item.name));
         // add 4 separators for visibility
         content.push_str("    ");
 
-        if item.is_expandable {
-            content.push('>');
-        } else {
-            content.push_str(&item.value.unwrap().to_string());
-            if let Some(unit) = item.unit.as_ref() {
-                content.push(' ');
-                content.push_str(unit);
-            }
-
-            if i == index && edit_mode {
-                content.push(' ');
-                content.push_str("[EDITING]");
-            }
-        }
+        content.push_str(&item.value);
         box_content(s, &content);
         content.clear();
     }
