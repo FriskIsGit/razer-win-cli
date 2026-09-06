@@ -104,7 +104,7 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
             KeyCode::ArrowUp | KeyCode::Char('w') | KeyCode::Char('W') => {
                 index = next_row_index_up(&menu_items, index);
             }
-            KeyCode::ArrowLeft => {
+            KeyCode::ArrowLeft | KeyCode::Char('a') | KeyCode::Char('A') => {
                 match index {
                     DPI_X_INDEX | DPI_Y_INDEX => {
                         let dpi_value = match index {
@@ -138,7 +138,7 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
                 }
 
             }
-            KeyCode::ArrowRight => {
+            KeyCode::ArrowRight | KeyCode::Char('d') | KeyCode::Char('D') => {
                 match index {
                     DPI_X_INDEX | DPI_Y_INDEX => {
                         let dpi_value = match index {
@@ -262,7 +262,7 @@ fn start_profiles_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
         buffer.clear();
 
         match crate::inputs::read_key() {
-            KeyCode::Backspace => {
+            KeyCode::Backspace | KeyCode::Char('q') | KeyCode::Char('Q') => {
                 break;
             }
             KeyCode::ArrowUp | KeyCode::Char('w') | KeyCode::Char('W') => {
@@ -304,7 +304,7 @@ fn start_lighting_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
         buffer.clear();
 
         match crate::inputs::read_key() {
-            KeyCode::Backspace => {
+            KeyCode::Backspace | KeyCode::Char('q') | KeyCode::Char('Q') => {
                 break;
             }
             KeyCode::ArrowUp | KeyCode::Char('w') | KeyCode::Char('W') => {
@@ -317,10 +317,10 @@ fn start_lighting_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
                     index += 1;
                 }
             }
-            KeyCode::ArrowLeft => {
+            KeyCode::ArrowLeft | KeyCode::Char('a') | KeyCode::Char('A') => {
                 adjust_lighting(device, definition, index, -1, &mut state, &mut status);
             }
-            KeyCode::ArrowRight => {
+            KeyCode::ArrowRight | KeyCode::Char('d') | KeyCode::Char('D') => {
                 adjust_lighting(device, definition, index, 1, &mut state, &mut status);
             }
             _ => {}

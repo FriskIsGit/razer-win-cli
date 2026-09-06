@@ -437,7 +437,7 @@ pub fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> R
     }
 
     let profile_name = validate_profile_name(name)?;
-    let mut profile = Profile { name: profile_name, settings };
+    let profile = Profile { name: profile_name, settings };
     save_profile(&profile)?;
     println!("Saved profile {:?} for {} ({pid:#06x})", profile.name, definition.name);
     Ok(())
