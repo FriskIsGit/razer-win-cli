@@ -399,3 +399,19 @@ fn apply_set(definition: &Definition) {
     let id = definition.id;
 }
 ```
+
+## Prefer defaulting combinators for simple optional values
+Prefer `unwrap_or` or `unwrap_or_default` combinators when  `Option` or `Result` 
+is used only to extract a value and the fallback requires no additional control flow.
+Avoid introducing a mutable variable and using `if let` solely to override a default:
+
+```rs
+// Avoid
+let mut result = 128;
+if let Some(value) = extract_value() {
+  result = value;
+}
+
+// Prefer
+let result = extract_value().unwrap_or(128);
+```

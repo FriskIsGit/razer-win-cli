@@ -1,14 +1,13 @@
 use std::cmp::{max, PartialEq};
 use std::fmt::Write;
 use hidapi::HidApi;
-use razer_hid::{Device, DeviceDef, Registry};
+use razer_hid::{Device, DeviceDef, LedRegion, Registry};
 use crate::cmd;
 use crate::cmd::{
-    apply_lighting, apply_profile, cmd_dpi, cmd_get_dpi,
-    cmd_get_polling, cmd_polling, list_profiles, load_profile,
+    apply_profile, cmd_dpi, cmd_get_dpi, cmd_get_polling, cmd_polling, list_profiles, load_profile,
 };
 use crate::inputs::KeyCode;
-use crate::{led_id_for, Effect, Profile};
+use crate::{Effect, Profile};
 
 fn test() {
     // After setting DPI do we get a report back stating what DPI is currently set?
@@ -52,12 +51,14 @@ const MAIN_MENU_ROWS: usize = 5;
 
 const POLLING_TABLE: [u16; 3] = [125, 500, 1000];
 
-const LIGHTING_ROW_EFFECT: usize = 0;
-const LIGHTING_ROW_COLOR_R: usize = 1;
-const LIGHTING_ROW_COLOR_G: usize = 2;
-const LIGHTING_ROW_COLOR_B: usize = 3;
-const LIGHTING_ROW_BRIGHTNESS: usize = 4;
-const LIGHTING_ROWS: usize = 5;
+const LIGHTING_ROW_LED: usize = 0;
+const LIGHTING_ROW_EFFECT: usize = 1;
+const LIGHTING_ROW_COLOR_R: usize = 2;
+const LIGHTING_ROW_COLOR_G: usize = 3;
+const LIGHTING_ROW_COLOR_B: usize = 4;
+const LIGHTING_ROW_BRIGHTNESS: usize = 5;
+const LIGHTING_ROW_LINK_ZONES: usize = 6;
+const LIGHTING_ROWS: usize = 7;
 const LIGHTING_STEP: i8 = 16;
 
 fn effect_name(effect: Effect) -> &'static str {
@@ -288,7 +289,7 @@ fn start_profiles_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
 
 fn start_lighting_menu(device: &Device, definition: &DeviceDef, buffer: &mut String) {
     let mut state = LightingState::read_initial(device, definition);
-    let mut index = LIGHTING_ROW_EFFECT;
+    let mut index = 0;
     let mut status: Option<String> = None;
 
     loop {
@@ -313,10 +314,10 @@ fn start_lighting_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
                 }
             }
             KeyCode::ArrowLeft => {
-                adjust_lighting(device, definition, index, -LIGHTING_STEP, &mut state, &mut status);
+                adjust_lighting(device, definition, index, -1, &mut state, &mut status);
             }
             KeyCode::ArrowRight => {
-                adjust_lighting(device, definition, index, LIGHTING_STEP, &mut state, &mut status);
+                adjust_lighting(device, definition, index, 1, &mut state, &mut status);
             }
             _ => {}
         }
@@ -324,45 +325,71 @@ fn start_lighting_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
 }
 
 #[derive(PartialEq)]
-struct LightingState {
+struct ZoneState {
     effect: Effect,
     color: [u8; 3],
     brightness: u8,
+    region: LedRegion,
+}
+
+#[derive(PartialEq)]
+struct LightingState {
+    zones: Vec<ZoneState>,
+    selected_zone: usize,
+    link_zones: bool,
 }
 
 impl LightingState {
     /// Defaults to static white at full brightness.
     /// The device's current brightness is read if available (there is no get command for effect or color).
     fn read_initial(device: &Device, definition: &DeviceDef) -> Self {
+        if !definition.capabilities.lighting {
+            return Self { zones: vec![], selected_zone: 0, link_zones: false }
+        }
+
         let mut state = Self {
-            effect: Effect::Static,
-            color: [255, 255, 255],
-            brightness: 255,
+            zones: Vec::with_capacity(definition.led_regions.len()),
+            selected_zone: 0,
+            link_zones: true
         };
-        if definition.capabilities.lighting {
-            let led = led_id_for(definition);
-            if let Ok(brightness) = cmd::cmd_get_brightness(device, definition, led) {
-                state.brightness = brightness;
-            }
+        for led_region in &definition.led_regions {
+            let current_brightness = cmd::cmd_get_brightness(device, definition, led_region.id);
+            let zone = ZoneState {
+                effect: Effect::Static,
+                color: [255, 255, 255],
+                brightness: current_brightness.unwrap_or(255),
+                region: led_region.clone()
+            };
+            state.zones.push(zone);
         }
         state
     }
 }
 
-/// Step the selected lighting row by one step or return LightingState unchanged.
-fn step_lighting_row(index: usize, delta: i8, state: &LightingState, effects: &Vec<Effect>) -> LightingState {
-    match index {
+/// Step the selected lighting row by one step. Return bool indicating if the state was altered.
+fn step_lighting_row(index: usize, signum: i8, state: &mut LightingState, definition: &DeviceDef) -> bool {
+    let effects = &definition.lighting_effects;
+
+    let (zone_index, _) = select_zone_index_with_label(state);
+
+    let modified = match index {
+        LIGHTING_ROW_LED => {
+            if let Some(next_index) = next_zone_index(signum, state) {
+                state.selected_zone = next_index;
+                true
+            } else {
+                false
+            }
+        }
         LIGHTING_ROW_EFFECT => {
-            let current = effect_index(effects, state.effect) as isize;
-            let mut next_index = current + delta.signum() as isize;
+            let zone = &mut state.zones[zone_index];
+            let current = effect_index(effects, zone.effect) as isize;
+            let mut next_index = current + signum as isize;
             if next_index < 0 || next_index >= effects.len() as isize {
                 next_index = current;
             }
-            LightingState {
-                effect: effects[next_index as usize],
-                color: state.color,
-                brightness: state.brightness,
-            }
+            zone.effect = effects[next_index as usize];
+            true
         }
         LIGHTING_ROW_COLOR_R | LIGHTING_ROW_COLOR_G | LIGHTING_ROW_COLOR_B => {
             let channel = match index {
@@ -371,21 +398,43 @@ fn step_lighting_row(index: usize, delta: i8, state: &LightingState, effects: &V
                 LIGHTING_ROW_COLOR_B => 2,
                 _ => unreachable!("matched earlier")
             };
-
-            let mut color = state.color;
-            color[channel] = step_u8(color[channel], delta);
-            LightingState {
-                effect: state.effect,
-                color,
-                brightness: state.brightness,
-            }
+            let zone = &mut state.zones[zone_index];
+            zone.color[channel] = step_u8(zone.color[channel], signum * LIGHTING_STEP);
+            true
         }
-        LIGHTING_ROW_BRIGHTNESS => LightingState {
-            effect: state.effect,
-            color: state.color,
-            brightness: step_u8(state.brightness, delta),
+        LIGHTING_ROW_BRIGHTNESS => {
+            let zone = &mut state.zones[zone_index];
+            zone.brightness = step_u8(zone.brightness, signum * LIGHTING_STEP);
+            true
+        },
+        LIGHTING_ROW_LINK_ZONES => {
+            state.link_zones = !state.link_zones;
+            false
         },
         _ => unreachable!("index is always within lighting rows")
+    };
+    let zone = &state.zones[zone_index];
+    let (brightness, color, effect) = (zone.brightness, zone.color, zone.effect);
+
+    // Keep other zones in sync if they're linked
+    if modified && state.link_zones {
+        for aZone in state.zones.iter_mut().skip(1) {
+            aZone.brightness = brightness;
+            aZone.color = color;
+            aZone.effect = effect;
+        }
+    }
+    return modified;
+}
+
+fn next_zone_index(signum: i8, state: &LightingState) -> Option<usize> {
+    let zone_index = state.selected_zone;
+    if state.link_zones ||
+        signum == -1 && zone_index == 0 ||
+        signum == 1 && zone_index + 1 == state.zones.len() {
+        None
+    } else {
+        Some((zone_index as i8 + signum) as usize)
     }
 }
 
@@ -404,22 +453,32 @@ fn adjust_lighting(
     device: &Device,
     definition: &DeviceDef,
     index: usize,
-    delta: i8,
+    signum: i8,
     state: &mut LightingState,
     status: &mut Option<String>,
 ) {
-    let new_state = step_lighting_row(index, delta, state, &definition.lighting_effects);
-    if new_state == *state {
+    if !step_lighting_row(index, signum, state, &definition) {
         return;
     }
-    // TODO: Make the LED selectable from UI
-    let led = led_id_for(definition);
-    match apply_lighting(device, definition, new_state.effect, new_state.color, led, new_state.brightness) {
-        Ok(()) => {
-            *state = new_state;
-            *status = None;
+    // TODO: Review whether lighting can persist
+    let (zone_index, _) = select_zone_index_with_label(state);
+    let led_ids;
+    let zone = &state.zones[zone_index];
+    if state.link_zones {
+        led_ids = state.zones.iter().map(|z| z.region.id).collect();
+    } else {
+        led_ids = vec![zone.region.id];
+    }
+    for led in led_ids {
+        if let Err(e) = cmd::set_effect(device, led , zone.effect, zone.color) {
+            *status = Some(format!("set effect failed: {e}"));
+            continue;
         }
-        Err(e) => *status = Some(format!("set lighting failed: {e}")),
+        if let Err(e) = cmd::set_brightness(device, led, zone.brightness) {
+            *status = Some(format!("set brightness failed: {e}"));
+            continue;
+        }
+        *status = None;
     }
 }
 
@@ -427,7 +486,8 @@ fn draw_lighting_ui(buffer: &mut String, index: usize, state: &LightingState, st
     draw_top(buffer);
     box_content(buffer, "< BACK");
     draw_separator(buffer);
-    draw_lighting_color_bar(buffer, state.color);
+    let (zone_index, _) = select_zone_index_with_label(state);
+    draw_lighting_color_bar(buffer, state.zones[zone_index].color);
     draw_separator(buffer);
     draw_lighting_options(buffer, index, state);
     draw_separator(buffer);
@@ -454,13 +514,38 @@ impl UiRow {
     }
 }
 
+fn select_zone_index_with_label(state: &LightingState) -> (usize, String) {
+    let index;
+    let label;
+    if state.link_zones {
+        index = 0;
+        label = "ALL ZONES".into();
+    } else if state.selected_zone < state.zones.len() {
+        index = state.selected_zone;
+        label = state.zones[index].region.name.to_string()
+    } else {
+        panic!("Invalid state, selected_zone is out of bounds")
+    };
+    return (index, label);
+}
+
 fn draw_lighting_options(s: &mut String, index: usize, state: &LightingState) {
+    if state.zones.len() == 0 {
+        eprintln!("Lighting options shouldn't be drawn if there are no zones");
+        return
+    }
+
+    let (zone_index, zone_label) = select_zone_index_with_label(state);
+    let zone = &state.zones[zone_index];
+
     let rows: [UiRow; LIGHTING_ROWS] = [
-        UiRow::new("EFFECT", effect_name(state.effect).to_string()),
-        UiRow::new("COLOR R", state.color[0].to_string()),
-        UiRow::new("COLOR G", state.color[1].to_string()),
-        UiRow::new("COLOR B", state.color[2].to_string()),
-        UiRow::new("BRIGHTNESS", state.brightness.to_string()),
+        UiRow::new("LED", zone_label),
+        UiRow::new("EFFECT", effect_name(zone.effect).to_string()),
+        UiRow::new("COLOR R", zone.color[0].to_string()),
+        UiRow::new("COLOR G", zone.color[1].to_string()),
+        UiRow::new("COLOR B", zone.color[2].to_string()),
+        UiRow::new("BRIGHTNESS", zone.brightness.to_string()),
+        UiRow::new("LINK ZONES", state.link_zones.to_string()),
     ];
     // Find widest item
     let mut max_length = 0;

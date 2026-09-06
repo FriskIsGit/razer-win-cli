@@ -122,6 +122,7 @@ fn parse_hex_to_u8(raw: &str) -> Result<u8, String> {
         .map_err(|e| format!("invalid hex id {raw:?}: {e}"))
 }
 
+// TODO Get rid of this method
 fn led_id_for(def: &DeviceDef) -> u8 {
     def.led_regions.first().map(|r| r.id).unwrap_or(led_id::LOGO)
 }
@@ -227,7 +228,7 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
                 Some(values) => parse_rgb(values)?,
                 None => [255, 255, 255]
             };
-            cmd::cmd_effect(&api, &registry, pid, effect, led, rgb)
+            cmd::cmd_effect(&device, def, led, effect, rgb)
         }
         "brightness" => {
             let (brightness, led) = parse_brightness_args(&vals)?;

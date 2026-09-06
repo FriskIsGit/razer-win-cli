@@ -239,54 +239,41 @@ pub fn cmd_color(device: &Device, def: &DeviceDef, rgb: Rgb, led: u8) -> Result<
     })
 }
 
+pub fn set_brightness(device: &Device, led: u8, brightness: u8) -> Result<(), String> {
+    with_retry(3, "set brightness", || {
+        device.set_brightness(NOSTORE, led, brightness).map_err(|e| e.to_string())
+    })
+}
+
+const WAVE_EFFECT_DIRECTION: u8 = 0x01;
+const REACTIVE_EFFECT_SPEED: u8 = 0x02;
+
 /// Send a lighting effect to the device. Uses NOSTORE (volatile) storage.
-fn set_effect(device: &Device, effect: Effect, led: u8, color: Rgb) -> Result<(), String> {
+pub fn set_effect(device: &Device, led: u8, effect: Effect, color: Rgb) -> Result<(), String> {
     with_retry(3, "set effect", || {
         match effect {
             Effect::None => device.set_effect_none(NOSTORE, led),
             Effect::Static => device.set_static_color(NOSTORE, led, color),
             Effect::Breathing => device.set_effect_breathing_single(NOSTORE, led, color),
             Effect::Spectrum => device.set_effect_spectrum(NOSTORE, led),
-            Effect::Wave => device.set_effect_wave(NOSTORE, led, 0x01),
-            Effect::Reactive => device.set_effect_reactive(NOSTORE, led, 0x02, color),
+            Effect::Wave => device.set_effect_wave(NOSTORE, led, WAVE_EFFECT_DIRECTION),
+            Effect::Reactive => device.set_effect_reactive(NOSTORE, led, REACTIVE_EFFECT_SPEED, color),
             Effect::Starlight | Effect::Custom => todo!(),
         }.map_err(|e| e.to_string())
     })
 }
 
-/// TODO: Review whether lighting can persist
-/// Apply a lighting effect and brightness to an already-open device.
-/// Lighting is volatile (NOSTORE) and resets when the device powers off.
-pub fn apply_lighting(
+pub fn cmd_effect(
     device: &Device,
     def: &DeviceDef,
-    effect: Effect,
-    color: Rgb,
     led: u8,
-    brightness: u8,
-) -> Result<(), String> {
-    if !def.capabilities.lighting {
-        return Err(format!("{} does not support lighting", def.name));
-    }
-    set_effect(device, effect, led, color)?;
-    with_retry(3, "set brightness", || {
-        device.set_brightness(NOSTORE, led, brightness).map_err(|e| e.to_string())
-    })
-}
-
-pub fn cmd_effect(
-    api: &HidApi,
-    registry: &Registry,
-    pid: u16,
     effect: Effect,
-    led: u8,
     rgb: Rgb,
 ) -> Result<(), String> {
-    let (device, def) = open_device(api, registry, pid)?;
     if !def.capabilities.lighting {
         return Err(format!("{} does not support lighting", def.name));
     }
-    set_effect(&device, effect, led, rgb)?;
+    set_effect(&device, led, effect,rgb)?;
     println!("{}: set effect {:?} on LED {led:#04x}", def.name, effect);
     Ok(())
 }
@@ -608,7 +595,7 @@ fn validate_profile_name(name: &str) -> Result<String, String> {
     if ok {
         Ok(trimmed.to_string())
     } else {
-        Err("profile name contains invalid characters (allowed: alnum, space, -, _)".to_string())
+        Err("profile name contains invalid characters (allowed: alphanumeric characters, space, -, _)".to_string())
     }
 }
 
@@ -692,7 +679,7 @@ fn apply_settings(device: &Device, def: &DeviceDef, settings: &DeviceSettings) -
 
     if def.capabilities.lighting {
         if let Some(l) = settings.lighting {
-            set_effect(device, l.effect, led, l.color)
+            set_effect(device, led, l.effect, l.color)
                 .map_err(|e| format!("set lighting effect: {e}"))?;
 
             device.set_brightness(NOSTORE, led, l.brightness)
