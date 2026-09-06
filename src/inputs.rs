@@ -2,6 +2,7 @@
 pub enum KeyCode {
     Char(char),
     Enter,
+    Escape,
     Backspace,
     Space,
     ArrowUp,
@@ -166,6 +167,7 @@ pub(crate) mod windows {
                         65..=90 | 97..=122 => return KeyCode::Char(char::from_u32_unchecked(data as u32)),
                         8  => return KeyCode::Backspace,
                         13 => return KeyCode::Enter,
+                        27 => return KeyCode::Escape,
                         32 => return KeyCode::Space,
                         _  => return KeyCode::Other(data as u64),
                     }
@@ -302,6 +304,7 @@ pub(crate) mod unix {
             match data {
                 65..=90 | 97..=122 => return KeyCode::Char(char::from_u32_unchecked(data as u32)),
                 10  => return KeyCode::Enter,
+                27  => return KeyCode::Escape,
                 32  => return KeyCode::Space,
                 127 => return KeyCode::Backspace,
                 0x445b1b => return KeyCode::ArrowLeft,

@@ -262,7 +262,7 @@ fn start_profiles_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
         buffer.clear();
 
         match crate::inputs::read_key() {
-            KeyCode::Backspace | KeyCode::Char('q') | KeyCode::Char('Q') => {
+            KeyCode::Backspace | KeyCode::Escape | KeyCode::Char('q') | KeyCode::Char('Q') => {
                 break;
             }
             KeyCode::ArrowUp | KeyCode::Char('w') | KeyCode::Char('W') => {
@@ -304,7 +304,7 @@ fn start_lighting_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
         buffer.clear();
 
         match crate::inputs::read_key() {
-            KeyCode::Backspace | KeyCode::Char('q') | KeyCode::Char('Q') => {
+            KeyCode::Backspace | KeyCode::Escape | KeyCode::Char('q') | KeyCode::Char('Q') => {
                 break;
             }
             KeyCode::ArrowUp | KeyCode::Char('w') | KeyCode::Char('W') => {
