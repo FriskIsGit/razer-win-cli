@@ -80,7 +80,7 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
     let (device, definition) = cmd::open_device(&api, &registry, pid)?;
 
     let (mut x, mut y) = cmd_get_dpi(&device, definition).unwrap_or_default();
-    let polling = cmd_get_polling(&device, definition).unwrap_or_default();
+    let mut polling = cmd_get_polling(&device, definition).unwrap_or_default();
     let mut polling_index = POLLING_TABLE.iter().position(|p| *p == polling).unwrap_or_default();
 
     let mut menu_items = build_menu_items(definition, x, y, polling);
@@ -122,10 +122,8 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
                             *dpi_value -= DPI_STEP;
                         }
                         let new_value = *dpi_value;
-                        // Better handle error to show in UI
-                        match cmd_dpi(&device, definition, x, y) {
-                            Ok(()) | Err(_) => menu_items[index].value = new_value.to_string(),
-                        }
+                        let _ = cmd_dpi(&device, definition, x, y);
+                        menu_items[index].value = new_value.to_string()
                     }
                     POLLING_INDEX => {
                         if polling_index == 0 {
@@ -154,10 +152,8 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
                         }
                         *dpi_value += DPI_STEP;
                         let new_value = *dpi_value;
-                        // Better handle error to show in UI
-                        match cmd_dpi(&device, definition, x, y) {
-                            Ok(()) | Err(_) => { menu_items[index].value = new_value.to_string(); }
-                        }
+                        let _ = cmd_dpi(&device, definition, x, y);
+                        menu_items[index].value = new_value.to_string();
                     }
                     POLLING_INDEX => {
                         if polling_index >= POLLING_TABLE.len() - 1 {
@@ -177,8 +173,17 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
             }
             KeyCode::Enter => {
                 match index {
-                    LIGHTING_INDEX => start_lighting_menu(&device, definition, &mut buffer),
-                    PROFILES_INDEX => start_profiles_menu(&device, definition, &mut buffer),
+                    LIGHTING_INDEX => {
+                        start_lighting_menu(&device, definition, &mut buffer);
+                    },
+                    PROFILES_INDEX => {
+                        start_profiles_menu(&device, definition, &mut buffer);
+                        (x, y) = cmd_get_dpi(&device, definition).unwrap_or_default();
+                        polling = cmd_get_polling(&device, definition).unwrap_or_default();
+                        menu_items[DPI_X_INDEX].value = x.to_string();
+                        menu_items[DPI_Y_INDEX].value = y.to_string();
+                        menu_items[POLLING_INDEX].value = polling.to_string();
+                    },
                     _ => {
                         if edit_mode {
 
@@ -245,8 +250,7 @@ fn draw_ui(buffer: &mut String, definition: &DeviceDef, index: usize, menu_items
 }
 
 fn start_profiles_menu(device: &Device, definition: &DeviceDef, buffer: &mut String) {
-    let pid = definition.usb_pid;
-    let profiles = load_profile_entries(pid);
+    let profiles = load_profile_entries();
     let mut index = 0;
     let mut status: Option<String> = None;
 
@@ -418,10 +422,10 @@ fn step_lighting_row(index: usize, signum: i8, state: &mut LightingState, defini
 
     // Keep other zones in sync if they're linked
     if modified && state.link_zones {
-        for aZone in state.zones.iter_mut().skip(1) {
-            aZone.brightness = brightness;
-            aZone.color = color;
-            aZone.effect = effect;
+        for a_zone in state.zones.iter_mut().skip(1) {
+            a_zone.brightness = brightness;
+            a_zone.color = color;
+            a_zone.effect = effect;
         }
     }
     return modified;
@@ -593,13 +597,13 @@ struct ProfileEntry {
     summary: String,
 }
 
-fn load_profile_entries(pid: u16) -> Vec<ProfileEntry> {
+fn load_profile_entries() -> Vec<ProfileEntry> {
     let mut entries = Vec::new();
     for name in list_profiles() {
         match load_profile(&name) {
             Ok(profile) => entries.push(ProfileEntry {
                 name,
-                summary: profile_summary_for(&profile, pid),
+                summary: profile_summary_for(&profile),
             }),
             Err(e) => entries.push(ProfileEntry {
                 name,
@@ -610,11 +614,8 @@ fn load_profile_entries(pid: u16) -> Vec<ProfileEntry> {
     entries
 }
 
-fn profile_summary_for(profile: &Profile, pid: u16) -> String {
-    let Some(entry) = profile.devices.iter().find(|entry| entry.id == pid) else {
-        return "(no settings for this device)".to_string();
-    };
-    let settings = &entry.settings;
+fn profile_summary_for(profile: &Profile) -> String {
+    let settings = &profile.settings;
     let mut parts: Vec<String> = Vec::new();
     if let Some(dpi) = settings.dpi {
         parts.push(format!("DPI {}x{}", dpi.x, dpi.y));

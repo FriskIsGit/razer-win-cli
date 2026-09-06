@@ -90,7 +90,7 @@ LIGHTING / RGB:
   brightness [--led <LED>]                  Read LED brightness
 
 PROFILES:
-  profile save <name> [--pid <pid>] [flags] Save settings as a named profile
+  profile save <name> [flags] Save settings as a named profile
     --dpi <x> <y>          DPI to save
     --effect <e>           Lighting effect
     --rgb <r> <g> <b>      RGB colour

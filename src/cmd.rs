@@ -10,7 +10,7 @@ use razer_hid::commands::dpi::DpiStage;
 use razer_hid::commands::lighting::Rgb;
 use razer_hid::commands::{NOSTORE, VARSTORE};
 use razer_hid::commands::info::mode;
-use crate::{ led_id_for, parse_hex_to_u16, DeviceEntry, DeviceSettings, DpiSettings, Effect, LightingSettings, Profile};
+use crate::{led_id_for, parse_hex_to_u16, ProfileSettings, DpiSettings, Effect, LightingSettings, Profile};
 
 /// Auto-detect the single connected Razer device. Returns an error if zero or
 /// more than one registry-known device is attached.
@@ -335,13 +335,13 @@ pub fn cmd_battery(device: &Device, def: &DeviceDef) -> Result<Battery, String> 
 // =========================================================================
 
 pub fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Result<(), String> {
-    // profile save <name> [--pid <pid>] [--dpi x y] [--effect <e>] [--rgb r g b] [--brightness n] [--polling hz]
+    // profile save <name> [--dpi x y] [--effect <e>] [--rgb r g b] [--brightness n] [--polling hz]
     if args.is_empty() {
-        return Err("usage: profile save <name> [--pid <pid>] [--dpi x y] [--effect <e>] [--rgb r g b] [--brightness n] [--polling hz]".into());
+        return Err("usage: profile save <name> [--dpi x y] [--effect <e>] [--rgb r g b] [--brightness n] [--polling hz]".into());
     }
     let name = &args[0];
     let mut pid: Option<u16> = None;
-    let mut settings = DeviceSettings::default();
+    let mut settings = ProfileSettings::default();
 
     let mut i = 1;
     while i < args.len() {
@@ -437,25 +437,19 @@ pub fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> R
     }
 
     let profile_name = validate_profile_name(name)?;
-    let mut profile = Profile { name: profile_name, ..Default::default() };
-    let device_entry = DeviceEntry::new(pid, settings);
-    profile.devices.push(device_entry);
+    let mut profile = Profile { name: profile_name, settings };
     save_profile(&profile)?;
     println!("Saved profile {:?} for {} ({pid:#06x})", profile.name, definition.name);
     Ok(())
 }
 
-pub fn cmd_profile_apply(api: &HidApi, registry: &Registry, name: &str) -> Result<(), String> {
+pub fn cmd_profile_apply(device: &Device, definition: &DeviceDef, name: &str) -> Result<(), String> {
     let profile = load_profile(name)?;
-    for device_entry in &profile.devices {
-        let pid = device_entry.id;
-        match open_device(api, registry, pid) {
-            Ok((device, def)) => match apply_settings(&device, def, &device_entry.settings) {
-                Ok(()) => println!("Applied {:?} to {} ({pid:#06x})", profile.name, def.name),
-                Err(e) => eprintln!("Failed to apply to {pid:#06x}: {e}"),
-            },
-            Err(e) => eprintln!("Cannot open {pid:#06x}: {e}"),
-        }
+    let settings = &profile.settings;
+    let pid = definition.usb_pid;
+    match apply_settings(device, definition, settings) {
+        Ok(()) => println!("Applied {:?} to {} ({pid:#06x})", profile.name, definition.name),
+        Err(e) => eprintln!("Failed to apply to {pid:#06x}: {e}"),
     }
     Ok(())
 }
@@ -487,14 +481,9 @@ pub fn cmd_profile_delete(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Load the saved profile `name` and apply the settings for device `pid` to the opened device.
 pub fn apply_profile(device: &Device, def: &DeviceDef, name: &str) -> Result<(), String> {
-    let pid = def.usb_pid;
     let profile = load_profile(name)?;
-    let Some(entry) = profile.devices.iter().find(|entry| entry.id == pid) else {
-        return Err(format!("profile {name:?} has no settings for {pid:#06x}"));
-    };
-    apply_settings(device, def, &entry.settings)
+    apply_settings(device, def, &profile.settings)
 }
 
 // =========================================================================
@@ -674,7 +663,7 @@ fn with_retry<T>(max_attempts: u32, label: &str, mut f: impl FnMut() -> Result<T
 /// Apply a DeviceSettings bundle to an open device. Lighting uses NOSTORE
 /// (volatile); DPI uses VARSTORE (persistent — devices reject NOSTORE with
 /// status 0x05 NOT_SUPPORTED).
-fn apply_settings(device: &Device, def: &DeviceDef, settings: &DeviceSettings) -> Result<(), String> {
+fn apply_settings(device: &Device, def: &DeviceDef, settings: &ProfileSettings) -> Result<(), String> {
     let led = led_id_for(def);
 
     if def.capabilities.lighting {

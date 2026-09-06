@@ -34,7 +34,7 @@ struct DpiSettings {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-struct DeviceSettings {
+struct ProfileSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     lighting: Option<LightingSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -43,31 +43,18 @@ struct DeviceSettings {
     polling_hz: Option<u16>,
 }
 
-impl DeviceEntry {
-    pub fn new(id: u16, settings: DeviceSettings) -> Self {
-        Self { id, settings }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct DeviceEntry {
-    id: u16,
-    #[serde(default)]
-    settings: DeviceSettings,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Profile {
     name: String,
     #[serde(default)]
-    devices: Vec<DeviceEntry>,
+    settings: ProfileSettings,
 }
 
 impl Default for Profile {
     fn default() -> Self {
         Self {
             name: String::new(),
-            devices: Default::default(),
+            settings: Default::default(),
         }
     }
 }
@@ -128,7 +115,7 @@ fn led_id_for(def: &DeviceDef) -> u8 {
 }
 
 
-fn update_lighting_color(settings: &mut DeviceSettings, color: [u8; 3]) {
+fn update_lighting_color(settings: &mut ProfileSettings, color: [u8; 3]) {
     match &mut settings.lighting {
         Some(lighting) => lighting.color = color,
         None =>
@@ -264,13 +251,16 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
             Ok(())
         }
         "profile" => {
-            let sub = rest.first().map(|s| s.as_str()).unwrap_or("");
-            let sub_args = &rest[1..];
-            match sub {
+            let sub_command = rest.first().cloned().unwrap_or_default();
+            let Some(sub_args) = &rest.get(1..) else {
+                println!("profile subcommands: save, apply, list, show, delete");
+                return Ok(())
+            };
+            match sub_command.as_str() {
                 "save" => cmd::cmd_profile_save(&api, &registry, sub_args),
                 "apply" => {
                     let name = sub_args.first().ok_or("profile apply requires <name>")?;
-                    cmd::cmd_profile_apply(&api, &registry, name)
+                    cmd::cmd_profile_apply(&device, &def, name)
                 }
                 "list" => {
                     cmd::cmd_profile_list();
@@ -404,7 +394,7 @@ LIGHTING / RGB:
 
 
 PROFILES:
-  profile save <name> [--pid <pid>] [flags] Save settings as a named profile
+  profile save <name> [flags] Save settings as a named profile
     --dpi <x> <y>          DPI to save
     --effect <e>           Lighting effect
     --rgb <r> <g> <b>      RGB colour
