@@ -1,34 +1,13 @@
 use std::cmp::{max, PartialEq};
-use std::fmt::Write;
 use hidapi::HidApi;
 use razer_hid::{Device, DeviceDef, LedRegion, Registry};
+use razer_hid::commands::lighting::Rgb;
 use crate::cmd;
 use crate::cmd::{
     apply_profile, cmd_dpi, cmd_get_dpi, cmd_get_polling, cmd_polling, list_profiles, load_profile,
 };
 use crate::inputs::KeyCode;
 use crate::{Effect, Profile};
-
-fn test() {
-    // After setting DPI do we get a report back stating what DPI is currently set?
-    print_color_bar(128, 255, 128, 50);
-    
-    println!("\nThis text is back to the default terminal color.");
-
-    println!("┌──────────────────────────────────────────────┐");
-    println!("│  < BACK                      LIGHTING CONFIG │");
-    println!("├──────────────────────────────────────────────┤");
-    println!("│  Current Color:  [████████████]  RGB(255,0,0)│");
-    println!("│                                              │");
-    println!("│  > Set Color (RGB)                           │");
-    println!("│    Brightness    :  85%                      │");
-    println!("│    Effect        :  Static                   │");
-    println!("│    Speed         :  Medium                   │");
-    println!("│                                              │");
-    println!("├──────────────────────────────────────────────┤");
-    println!("│  [↑/↓] Navigate  [Enter] Select  [Esc] Back  │");
-    println!("└──────────────────────────────────────────────┘");
-}
 
 const TOP_LEFT: char = '┌';
 const TOP_RIGHT: char = '┐';
@@ -47,8 +26,6 @@ const POLLING_INDEX: usize = 2;
 const LIGHTING_INDEX: usize = 3;
 const PROFILES_INDEX: usize = 4;
 
-const MAIN_MENU_ROWS: usize = 5;
-
 const POLLING_TABLE: [u16; 3] = [125, 500, 1000];
 
 const LIGHTING_ROW_LED: usize = 0;
@@ -60,6 +37,8 @@ const LIGHTING_ROW_BRIGHTNESS: usize = 5;
 const LIGHTING_ROW_LINK_ZONES: usize = 6;
 const LIGHTING_ROWS: usize = 7;
 const LIGHTING_STEP: i8 = 16;
+
+const DEFAULT_COLOR: Rgb = [0, 255, 0];
 
 fn effect_name(effect: Effect) -> &'static str {
     match effect {
@@ -282,8 +261,8 @@ fn start_profiles_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
                 }
                 let name = &profiles[index].name;
                 match apply_profile(device, definition, name) {
-                    Ok(()) => status = Some(format!("applied {name:?}")),
-                    Err(e) => status = Some(format!("failed to apply {name:?}: {e}")),
+                    Ok(()) => status = Some(format!("applied {name}")),
+                    Err(e) => status = Some(format!("failed to apply {name}: {e}")),
                 }
             }
             _ => {}
@@ -360,7 +339,7 @@ impl LightingState {
             let current_brightness = cmd::cmd_get_brightness(device, definition, led_region.id);
             let zone = ZoneState {
                 effect: Effect::Static,
-                color: [255, 255, 255],
+                color: DEFAULT_COLOR,
                 brightness: current_brightness.unwrap_or(255),
                 region: led_region.clone()
             };
@@ -620,8 +599,9 @@ fn profile_summary_for(profile: &Profile) -> String {
     if let Some(dpi) = settings.dpi {
         parts.push(format!("DPI {}x{}", dpi.x, dpi.y));
     }
-    if let Some(lighting) = settings.lighting {
-        parts.push(format!("{} {}/255", effect_name(lighting.effect), lighting.brightness));
+    if let Some(zone) = settings.global_zone {
+        let percentage = zone.brightness as usize * 100 / 255;
+        parts.push(format!("{} {percentage}%", effect_name(zone.effect)));
     }
     if let Some(hz) = settings.polling_hz {
         parts.push(format!("{hz} Hz"));
@@ -735,13 +715,3 @@ fn box_content(s: &mut String, content: &str) {
     s.push('\n');
 }
 
-fn print_color_bar(r: u8, g: u8, b: u8, length: usize) {
-    let reset = "\x1b[0m";
-    let bg_code = format!("\x1b[48;2;{};{};{}m", r, g, b);
-    let bar = " ".repeat(length);
-    print!("{bg_code}{bar}{reset}\n");
-}
-
-fn pad_right(s: &mut String, text: &str, width: usize) {
-    write!(s, "{:<width$}", text, width = width).unwrap();
-}

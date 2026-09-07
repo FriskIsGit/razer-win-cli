@@ -10,7 +10,7 @@ use razer_hid::commands::dpi::DpiStage;
 use razer_hid::commands::lighting::Rgb;
 use razer_hid::commands::{NOSTORE, VARSTORE};
 use razer_hid::commands::info::mode;
-use crate::{led_id_for, parse_hex_to_u16, ProfileSettings, DpiSettings, Effect, LightingSettings, Profile};
+use crate::{parse_hex_to_u8, parse_hex_to_u16, ProfileSettings, DpiSettings, Effect, ZoneSettings, Profile };
 
 /// Auto-detect the single connected Razer device. Returns an error if zero or
 /// more than one registry-known device is attached.
@@ -278,6 +278,23 @@ pub fn cmd_effect(
     Ok(())
 }
 
+pub fn cmd_effect_all(
+    device: &Device,
+    def: &DeviceDef,
+    effect: Effect,
+    rgb: Rgb,
+) -> Result<(), String> {
+    if !def.capabilities.lighting {
+        return Err(format!("{} does not support lighting", def.name));
+    }
+    for region in &def.led_regions {
+        let led = region.id;
+        set_effect(&device, led, effect,rgb)?;
+        println!("{}: set effect {:?} on LED {led:#04x}", def.name, effect);
+    }
+    Ok(())
+}
+
 pub fn cmd_brightness(device: &Device, definition: &DeviceDef, value: u8, led: u8) -> Result<(), String> {
     if !definition.capabilities.lighting {
         return Err(format!("{} does not support lighting", definition.name));
@@ -334,25 +351,26 @@ pub fn cmd_battery(device: &Device, def: &DeviceDef) -> Result<Battery, String> 
 // Profile commands
 // =========================================================================
 
-pub fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> Result<(), String> {
-    // profile save <name> [--dpi x y] [--effect <e>] [--rgb r g b] [--brightness n] [--polling hz]
-    if args.is_empty() {
-        return Err("usage: profile save <name> [--dpi x y] [--effect <e>] [--rgb r g b] [--brightness n] [--polling hz]".into());
-    }
-    let name = &args[0];
-    let mut pid: Option<u16> = None;
+const DEFAULT_COLOR: Rgb = [0, 255, 0];
+
+pub fn cmd_profile_save(_api: &HidApi, _registry: &Registry, args: &[String]) -> Result<(), String> {
+    let Some(name) = args.first() else {
+        return Err("usage: profile save <name> [--dpi x y] [--polling hz] [--led <id>] [--effect <e>] [--rgb r g b] [--brightness n] ".into());
+    };
+
     let mut settings = ProfileSettings::default();
+
+    let mut led: Option<u8> = None;
+    let mut global_zone = ZoneSettings {
+        led_id: 0,
+        effect: Effect::Static,
+        color: DEFAULT_COLOR,
+        brightness: 128
+    };
 
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--pid" | "-p" => {
-                if i + 1 >= args.len() {
-                    return Err("--pid requires a value".into());
-                }
-                pid = Some(parse_hex_to_u16(&args[i + 1])?);
-                i += 2;
-            }
             "--dpi" => {
                 if i + 2 >= args.len() {
                     return Err("--dpi requires <x> <y>".into());
@@ -367,11 +385,9 @@ pub fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> R
                     return Err("--effect requires <static|breathing|spectrum|wave|reactive|none>".into());
                 }
                 let effect = Effect::parse(&args[i + 1])?;
-                if settings.lighting.is_none() {
-                    settings.lighting = Some(LightingSettings { effect, color: [255, 255, 255], brightness: 255 });
-                } else if let Some(ref mut l) = settings.lighting {
-                    l.effect = effect;
-                }
+                let zone = get_zone_or(&mut settings.lighting_zones, led, &mut global_zone);
+                zone.effect = effect;
+
                 i += 2;
             }
             "--rgb" => {
@@ -381,24 +397,17 @@ pub fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> R
                 let r = args[i + 1].parse::<u8>().map_err(|e| e.to_string())?;
                 let g = args[i + 2].parse::<u8>().map_err(|e| e.to_string())?;
                 let b = args[i + 3].parse::<u8>().map_err(|e| e.to_string())?;
-                // update_lighting_color(&mut settings, [r,g,b]);
-                if settings.lighting.is_none() {
-                    settings.lighting = Some(LightingSettings { effect: Effect::Static, color: [r, g, b], brightness: 255 });
-                } else if let Some(ref mut l) = settings.lighting {
-                    l.color = [r, g, b];
-                }
+                let zone = get_zone_or(&mut settings.lighting_zones, led, &mut global_zone);
+                zone.color = [r, g, b];
                 i += 4;
             }
             "--brightness" => {
                 if i + 1 >= args.len() {
                     return Err("--brightness requires <0-255>".into());
                 }
-                let v = args[i + 1].parse::<u8>().map_err(|e| e.to_string())?;
-                if settings.lighting.is_none() {
-                    settings.lighting = Some(LightingSettings { effect: Effect::Static, color: [255, 255, 255], brightness: v });
-                } else if let Some(ref mut l) = settings.lighting {
-                    l.brightness = v;
-                }
+                let brightness = args[i + 1].parse::<u8>().map_err(|e| e.to_string())?;
+                let zone = get_zone_or(&mut settings.lighting_zones, led, &mut global_zone);
+                zone.brightness = brightness;
                 i += 2;
             }
             "--polling" => {
@@ -409,38 +418,50 @@ pub fn cmd_profile_save(api: &HidApi, registry: &Registry, args: &[String]) -> R
                 settings.polling_hz = Some(hz);
                 i += 2;
             }
+            "--led" => {
+                if i + 1 >= args.len() {
+                    return Err("--led requires <id>".into());
+                }
+                let parsed_led = parse_hex_to_u8(&args[i + 1])?;
+                // This check also prevents duplicating zones
+                if settings.lighting_zones.iter().find(|z| z.led_id == parsed_led).is_none() {
+                    let zone = ZoneSettings {
+                        led_id: parsed_led,
+                        effect: Effect::Static,
+                        color: DEFAULT_COLOR,
+                        brightness: 128
+                    };
+                    settings.lighting_zones.push(zone)
+                }
+                led = Some(parsed_led);
+                i += 2;
+            }
             other => return Err(format!("unknown flag {other:?}")),
         }
     }
 
-    let pid = match pid {
-        Some(p) => p,
-        None => auto_detect_pid(api, registry)?,
-    };
-
-    let Some(definition) = registry.find_by_pid(pid) else {
-        return Err(format!("PID {pid:#06x} not in registry"));
-    };
-
-    // Validate capabilities
-    if settings.dpi.is_some() && !definition.capabilities.dpi {
-        eprintln!("warning: {} does not support DPI; ignoring --dpi", definition.name);
-        settings.dpi = None;
+    if led.is_none() {
+        settings.global_zone = Some(global_zone);
     }
-    if settings.lighting.is_some() && !definition.capabilities.lighting {
-        eprintln!("warning: {} does not support lighting; ignoring lighting flags", definition.name);
-        settings.lighting = None;
-    }
-    if settings.polling_hz.is_some() && !definition.capabilities.polling_rate {
-        eprintln!("warning: {} does not support polling rate; ignoring --polling", definition.name);
-        settings.polling_hz = None;
-    }
-
     let profile_name = validate_profile_name(name)?;
     let profile = Profile { name: profile_name, settings };
     save_profile(&profile)?;
-    println!("Saved profile {:?} for {} ({pid:#06x})", profile.name, definition.name);
+    println!("Saved profile {:?}", profile.name);
     Ok(())
+}
+
+fn get_zone_or<'a>(
+    zones: &'a mut Vec<ZoneSettings>,
+    led: Option<u8>,
+    global_zone: &'a mut ZoneSettings,
+) -> &'a mut ZoneSettings {
+    match led {
+        Some(led_id) => zones
+            .iter_mut()
+            .find(|z| z.led_id == led_id)
+            .expect("lighting zone should exist for this LED"),
+        None => global_zone,
+    }
 }
 
 pub fn cmd_profile_apply(device: &Device, definition: &DeviceDef, name: &str) -> Result<(), String> {
@@ -664,15 +685,14 @@ fn with_retry<T>(max_attempts: u32, label: &str, mut f: impl FnMut() -> Result<T
 /// (volatile); DPI uses VARSTORE (persistent — devices reject NOSTORE with
 /// status 0x05 NOT_SUPPORTED).
 fn apply_settings(device: &Device, def: &DeviceDef, settings: &ProfileSettings) -> Result<(), String> {
-    let led = led_id_for(def);
-
     if def.capabilities.lighting {
-        if let Some(l) = settings.lighting {
-            set_effect(device, led, l.effect, l.color)
-                .map_err(|e| format!("set lighting effect: {e}"))?;
-
-            device.set_brightness(NOSTORE, led, l.brightness)
-                .map_err(|e| format!("set brightness: {e}"))?;
+        if let Some(zone) = settings.global_zone {
+            cmd_effect_all(device, def, zone.effect, zone.color)?
+        } else if !settings.lighting_zones.is_empty() {
+            for zone in &settings.lighting_zones {
+                set_effect(device, zone.led_id, zone.effect, zone.color)?;
+                set_brightness(device, zone.led_id, zone.brightness)?;
+            }
         }
     }
     if def.capabilities.dpi {

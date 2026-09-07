@@ -19,11 +19,11 @@ use razer_hid::registry::Effect;
 use crate::cmd::open_device;
 
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-struct LightingSettings {
+struct ZoneSettings {
+    led_id: u8,
     effect: Effect,
-    color: Rgb,
+    color: [u8; 3],
     brightness: u8,
 }
 
@@ -33,10 +33,12 @@ struct DpiSettings {
     y: u16,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct ProfileSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    lighting: Option<LightingSettings>,
+    global_zone: Option<ZoneSettings>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    lighting_zones: Vec<ZoneSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     dpi: Option<DpiSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -109,24 +111,6 @@ fn parse_hex_to_u8(raw: &str) -> Result<u8, String> {
         .map_err(|e| format!("invalid hex id {raw:?}: {e}"))
 }
 
-// TODO Get rid of this method
-fn led_id_for(def: &DeviceDef) -> u8 {
-    def.led_regions.first().map(|r| r.id).unwrap_or(led_id::LOGO)
-}
-
-
-fn update_lighting_color(settings: &mut ProfileSettings, color: [u8; 3]) {
-    match &mut settings.lighting {
-        Some(lighting) => lighting.color = color,
-        None =>
-            settings.lighting = Some(LightingSettings {
-            effect: Effect::Static,
-            color,
-            brightness: 255,
-        })
-    }
-}
-
 // =========================================================================
 // Entry point
 // =========================================================================
@@ -153,6 +137,8 @@ fn run() -> Result<(), String> {
     let rest = &args[1..]; // args after the command name
     return perform_command(api, registry, cmd, rest);
 }
+
+const DEFAULT_COLOR: Rgb = [0, 255, 0];
 
 fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String]) -> Result<(), String> {
     let (pid, vals) = cmd::resolve_pid(&api, &registry, rest)?;
@@ -198,10 +184,8 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
             let rgb = parse_rgb(&vals)?;
             let led = parse_led(vals.get(3))?;
             cmd::cmd_color(&device, &def, rgb, led)?;
-            println!(
-                "{}: set static color #{:02x}{:02x}{:02x} on LED {led:#04x}",
-                def.name, rgb[0], rgb[1], rgb[2]
-            );
+            let mouse_name = &def.name;
+            println!("{mouse_name}: set static color {rgb:?} on LED {led:#04x}");
             Ok(())
         }
         "effect" => {
@@ -209,31 +193,30 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
                 return Err("effect requires <static|breathing|spectrum|wave|reactive|none>".to_owned())
             };
             let effect = Effect::parse(effect_name)?;
-
-            let led = parse_led(vals.get(1))?;
-            let rgb: Rgb = match vals.get(2..5) {
+            let rgb: Rgb = match vals.get(1..4) {
                 Some(values) => parse_rgb(values)?,
-                None => [255, 255, 255]
+                None => DEFAULT_COLOR
             };
-            cmd::cmd_effect(&device, def, led, effect, rgb)
+            if let Some(led_flag) = vals.iter().position(|s| s == "--led") {
+                let led = parse_led(vals.get(led_flag + 1))?;
+                cmd::cmd_effect(&device, def, led, effect, rgb)
+            } else {
+                cmd::cmd_effect_all(&device, def, effect, rgb)
+            }
         }
         "brightness" => {
             let (brightness, led) = parse_brightness_args(&vals)?;
+            let mouse_name = &def.name;
             match brightness {
                 Some(value) => {
                     cmd::cmd_brightness(&device, def, value, led)?;
-                    let mouse_name = &def.name;
-                    let percentage = value as u32 * 100 / 255;
-                    println!(
-                        "{mouse_name}: set brightness {value}/255 ({percentage}%) on LED {led:#04x}",
-                    );
+                    let percentage = value as usize * 100 / 255;
+                    println!("{mouse_name}: set brightness {value}/255 ({percentage}%) on LED {led:#04x}");
                 },
                 None => {
                     let value = cmd::cmd_get_brightness(&device, def, led)?;
-                    println!(
-                        "{}: brightness {}/255 ({}%) on LED {led:#04x}",
-                        def.name, value, value as usize * 100 / 255
-                    );
+                    let percentage = value as usize * 100 / 255;
+                    println!("{mouse_name}: brightness {value}/255 ({percentage}%) on LED {led:#04x}");
                 }
             }
             Ok(())
@@ -356,7 +339,7 @@ fn main() -> ExitCode {
 }
 
 fn version() -> &'static str {
-    return "v-0.1-DEV"
+    return "v0.2-DEV"
 }
 
 // =========================================================================
@@ -375,47 +358,55 @@ USAGE:
                 Required if multiple devices are connected.
 
 DEVICE:
-  list                                      Enumerate attached Razer devices + registry
-  info                                      Show device details (serial, firmware, capabilities)
-  battery                                   Read battery level + charging status
+  list                                       Enumerate attached Razer devices + registry
+  info                                       Show device details (serial, firmware, capabilities)
+  battery                                    Read battery level + charging status
 
 PERFORMANCE:
-  dpi                                       Read current DPI
-  dpi <x> [y]                               Set DPI (y defaults to x)
-  dpi-stages <active> <v1> [<v2> ...]       Set 2-5 DPI stages; <active> is the 0-based index
-  polling                                   Read polling rate
-  polling <hz>                              Set polling rate (125/500/1000)
+  dpi                                        Read current DPI
+  dpi <x> [y]                                Set DPI (y defaults to x)
+  dpi-stages <active> <v1> [<v2> ...]        Set 2-5 DPI stages; <active> is the 0-based index
+  polling                                    Read polling rate
+  polling <hz>                               Set polling rate (125/500/1000)
 
 LIGHTING / RGB:
-  color <r> <g> <b> [led]                   Set a static colour
-  effect <effect> [led] [r g b]             Set lighting effect (static|breathing|spectrum|wave|reactive|none)
-  brightness <0-255> [--led <LED>]          Set LED brightness
-  brightness [--led <LED>]                  Read LED brightness
+  color <r> <g> <b> [led]                    Set a static color
+  effect <effect> <r> <g> <b> [--led <id>]   Set a lighting effect
+  brightness <0-255> [--led <id>]            Set LED brightness
+  brightness [--led <id>]                    Read LED brightness
 
+  EFFECTS: static | breathing | spectrum | wave | reactive | none
+    Some effects, such as spectrum and wave, don’t require an RGB value.
 
 PROFILES:
-  profile save <name> [flags] Save settings as a named profile
-    --dpi <x> <y>          DPI to save
-    --effect <e>           Lighting effect
-    --rgb <r> <g> <b>      RGB colour
-    --brightness <0-255>   Brightness
-    --polling <hz>         Polling rate
-  profile apply <name>                      Apply a saved profile to connected devices
-  profile list                              List saved profiles
-  profile show <name>                       Print a saved profile as JSON
-  profile delete <name>                     Delete a saved profile
+  profile save <name> [flags]  Save settings as a named profile
+    --dpi <x> <y>              DPI to save
+    --polling <hz>             Polling rate
+    --led <id>                 Select an LED zone
+    --effect <e>               Lighting effect
+    --rgb <r> <g> <b>          RGB colour
+    --brightness <0-255>       Brightness
+
+  profile list                 List saved profiles
+  profile apply <name>         Apply a saved profile to connected devices
+  profile show <name>          Print a saved profile as JSON
+  profile delete <name>        Delete a saved profile
+
+  LED SELECTION:
+    LED settings apply to the currently selected zone.
+    Repeat --led <id> to select and configure another zone.
 
 EXAMPLES:
-  razer-win-cli list
-  razer-win-cli dpi 1600                    # auto-detect, set DPI 1600x1600
-  razer-win-cli dpi 1600 800 --pid 0x005C   # explicit PID
-  razer-win-cli color 255 0 128             # pink logo LED
-  razer-win-cli color 0 255 0 0x01          # green scroll LED
-  razer-win-cli effect spectrum             # spectrum cycle
-  razer-win-cli polling 1000
-  razer-win-cli profile save Gaming --dpi 1600 1600 --effect static --rgb 255 0 128
+  cli list
+  cli dpi 1600                    # auto-detect, set DPI 1600x1600
+  cli dpi 1600 800 --pid 0x005C   # explicit PID
+  cli polling 1000                # polling rate 1000 Hz
+  cli color 255 0 128 --led 4     # pink logo LED
+  cli effect spectrum             # spectrum cycle
+  cli profile save Gaming --dpi 1600 1600 --effect static --rgb 255 0 128
 
 NOTES:
   <led> is a hex LED id (default: 0x04 logo). Common: 0x01 scroll, 0x04 logo, 0x05 backlight.
+  If --led is omitted, the command applies to all LED zones.
   Profiles are stored as JSON in ~/.razer-win-cli/profiles/ (override with RAZER_CLI_PROFILES_DIR)."
 }

@@ -39,19 +39,6 @@ If you're using a `*-pc-windows-gnu` target:
 5. Add `mingw64\bin` to your `PATH`.
 
 
-## The --pid flag
-
-`--pid` (or `-p`) is **optional**. When omitted, the tool auto-detects the
-single connected Razer device. If multiple devices are connected, `--pid` is
-required.
-
-```
-razer-win-cli dpi 1600                     # auto-detect device, set 1600x1600
-razer-win-cli dpi 1600 800 --pid 0x005C    # explicit PID
-razer-win-cli color 255 0 128 --pid 5c     # PID without 0x prefix
-razer-win-cli info                         # auto-detect, show device info
-```
-
 ## Supported devices
 
 | Device                   | USB PID  | Type     | DPI Range | Lighting | Polling |
@@ -66,40 +53,50 @@ razer-win-cli info                         # auto-detect, show device info
 
 ```
 USAGE:
-  razer-win-cli <command> [args...] [--pid <pid>]
+  cli <command> [args...] [--pid <pid>]
 
   --pid <pid>   Optional. Accepts 0x005c, 005C, or 5c.
                 When omitted, auto-detects the single connected Razer device.
+                Required if multiple devices are connected.
 
 DEVICE:
-  list                                      Enumerate attached Razer devices + registry
-  info                                      Show device details (serial, firmware, capabilities)
-  battery                                   Read battery level + charging status
+  list                                       Enumerate attached Razer devices + registry
+  info                                       Show device details (serial, firmware, capabilities)
+  battery                                    Read battery level + charging status
 
 PERFORMANCE:
-  dpi                                       Read current DPI
-  dpi <x> [y]                               Set DPI (y defaults to x)
-  dpi-stages <active> <v1> [<v2> ...]       Set 2-5 DPI stages; <active> is the 0-based index
-  polling                                   Read polling rate
-  polling <hz>                              Set polling rate (125/500/1000)
+  dpi                                        Read current DPI
+  dpi <x> [y]                                Set DPI (y defaults to x)
+  dpi-stages <active> <v1> [<v2> ...]        Set 2-5 DPI stages; <active> is the 0-based index
+  polling                                    Read polling rate
+  polling <hz>                               Set polling rate (125/500/1000)
 
 LIGHTING / RGB:
-  color <r> <g> <b> [led]                   Set a static colour
-  effect <effect> [led] [r g b]             Set lighting effect (static|breathing|spectrum|wave|reactive|none)
-  brightness <0-255> [--led <LED>]          Set LED brightness
-  brightness [--led <LED>]                  Read LED brightness
+  color <r> <g> <b> [led]                    Set a static color
+  effect <effect> <r> <g> <b> [--led <id>]   Set a lighting effect
+  brightness <0-255> [--led <id>]            Set LED brightness
+  brightness [--led <id>]                    Read LED brightness
+
+  EFFECTS: static | breathing | spectrum | wave | reactive | none
+    Some effects, such as spectrum and wave, don’t require an RGB value.
 
 PROFILES:
-  profile save <name> [flags] Save settings as a named profile
-    --dpi <x> <y>          DPI to save
-    --effect <e>           Lighting effect
-    --rgb <r> <g> <b>      RGB colour
-    --brightness <0-255>   Brightness
-    --polling <hz>         Polling rate
-  profile apply <name>                      Apply a saved profile to connected devices
-  profile list                              List saved profiles
-  profile show <name>                       Print a saved profile as JSON
-  profile delete <name>                     Delete a saved profile
+  profile save <name> [flags]  Save settings as a named profile
+    --dpi <x> <y>              DPI to save
+    --polling <hz>             Polling rate
+    --led <id>                 Select an LED zone
+    --effect <e>               Lighting effect
+    --rgb <r> <g> <b>          RGB colour
+    --brightness <0-255>       Brightness
+
+  profile list                 List saved profiles
+  profile apply <name>         Apply a saved profile to connected devices
+  profile show <name>          Print a saved profile as JSON
+  profile delete <name>        Delete a saved profile
+
+  LED SELECTION:
+    LED settings apply to the currently selected zone.
+    Repeat --led <id> to select and configure another zone.
 ```
 
 `<led>` is a hex LED id (default: `0x04` logo). Common: `0x01` scroll, `0x04`
