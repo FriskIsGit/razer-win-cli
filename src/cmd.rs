@@ -170,9 +170,7 @@ pub fn cmd_dpi(device: &Device, def: &DeviceDef, x: u16, y: u16) -> Result<(), S
     if !def.capabilities.dpi {
         return Err(format!("{} does not support DPI", def.name));
     }
-    with_retry(3, "set DPI", || {
-        device.set_dpi(VARSTORE, x, y).map_err(|e| e.to_string())
-    })?;
+    device.set_dpi(VARSTORE, x, y).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -180,19 +178,14 @@ pub fn cmd_get_dpi(device: &Device, definition: &DeviceDef) -> Result<(u16, u16)
     if !definition.capabilities.dpi {
         return Err(format!("{} does not support DPI", definition.name));
     }
-    let (x, y) = with_retry(3, "get DPI", || {
-        device.get_dpi(VARSTORE).map_err(|e| e.to_string())
-    })?;
-    Ok((x, y))
+    device.get_dpi(VARSTORE).map_err(|e| e.to_string())
 }
 
 pub fn cmd_get_dpi_stages(device: &Device, def: &DeviceDef) -> Result<(u8, Vec<DpiStage>), String> {
     if !def.capabilities.dpi_stages {
         return Err(dpi_stages_unsupported(def));
     }
-    with_retry(3, "get DPI stages", || {
-        device.get_dpi_stages(VARSTORE).map_err(|e| e.to_string())
-    })
+    device.get_dpi_stages(VARSTORE).map_err(|e| e.to_string())
 }
 
 pub fn cmd_dpi_stages(device: &Device, def: &DeviceDef, active: u8, values: &[u16]) -> Result<(), String> {
@@ -208,9 +201,7 @@ pub fn cmd_dpi_stages(device: &Device, def: &DeviceDef, active: u8, values: &[u1
         .map(|(i, &v)| DpiStage { index: i as u8, dpi_x: v, dpi_y: v })
         .collect();
     println!("{:?}", stages);
-    with_retry(3, "set DPI stages", || {
-        device.set_dpi_stages(VARSTORE, active, &stages).map_err(|e| e.to_string())
-    })?;
+    device.set_dpi_stages(VARSTORE, active, &stages).map_err(|e| e.to_string())?;
     println!("{}: set {} DPI stage(s), active stage {active}", def.name, stages.len());
     for (i, s) in stages.iter().enumerate() {
         let marker = if i as u8 == active { " <== active" } else { "" };
@@ -234,33 +225,27 @@ pub fn cmd_color(device: &Device, def: &DeviceDef, rgb: Rgb, led: u8) -> Result<
     if !def.capabilities.lighting {
         return Err(format!("{} does not support lighting", def.name));
     }
-    with_retry(3, "set color", || {
-        device.set_static_color(NOSTORE, led, rgb).map_err(|e| e.to_string())
-    })
+    device.set_static_color(NOSTORE, led, rgb).map_err(|e| e.to_string())
 }
 
 pub fn set_brightness(device: &Device, led: u8, brightness: u8) -> Result<(), String> {
-    with_retry(3, "set brightness", || {
-        device.set_brightness(NOSTORE, led, brightness).map_err(|e| e.to_string())
-    })
+    device.set_brightness(NOSTORE, led, brightness).map_err(|e| e.to_string())
 }
 
 const WAVE_EFFECT_DIRECTION: u8 = 0x01;
 const REACTIVE_EFFECT_SPEED: u8 = 0x02;
 
-/// Send a lighting effect to the device. Uses NOSTORE (volatile) storage.
+/// Send a lighting effect to the device. Uses NOSTORE (volatile) storage but VARSTORE is supported.
 pub fn set_effect(device: &Device, led: u8, effect: Effect, color: Rgb) -> Result<(), String> {
-    with_retry(3, "set effect", || {
-        match effect {
-            Effect::None => device.set_effect_none(NOSTORE, led),
-            Effect::Static => device.set_static_color(NOSTORE, led, color),
-            Effect::Breathing => device.set_effect_breathing_single(NOSTORE, led, color),
-            Effect::Spectrum => device.set_effect_spectrum(NOSTORE, led),
-            Effect::Wave => device.set_effect_wave(NOSTORE, led, WAVE_EFFECT_DIRECTION),
-            Effect::Reactive => device.set_effect_reactive(NOSTORE, led, REACTIVE_EFFECT_SPEED, color),
-            Effect::Starlight | Effect::Custom => todo!(),
-        }.map_err(|e| e.to_string())
-    })
+    match effect {
+        Effect::None => device.set_effect_none(NOSTORE, led),
+        Effect::Static => device.set_static_color(NOSTORE, led, color),
+        Effect::Breathing => device.set_effect_breathing_single(NOSTORE, led, color),
+        Effect::Spectrum => device.set_effect_spectrum(NOSTORE, led),
+        Effect::Wave => device.set_effect_wave(NOSTORE, led, WAVE_EFFECT_DIRECTION),
+        Effect::Reactive => device.set_effect_reactive(NOSTORE, led, REACTIVE_EFFECT_SPEED, color),
+        Effect::Starlight | Effect::Custom => todo!(),
+    }.map_err(|e| e.to_string())
 }
 
 pub fn cmd_effect(
@@ -299,36 +284,28 @@ pub fn cmd_brightness(device: &Device, definition: &DeviceDef, value: u8, led: u
     if !definition.capabilities.lighting {
         return Err(format!("{} does not support lighting", definition.name));
     }
-    with_retry(3, "set brightness", || {
-        device.set_brightness(NOSTORE, led, value).map_err(|e| e.to_string())
-    })
+    device.set_brightness(NOSTORE, led, value).map_err(|e| e.to_string())
 }
 
 pub fn cmd_get_brightness(device: &Device, def: &DeviceDef, led: u8) -> Result<u8, String> {
     if !def.capabilities.lighting {
         return Err(format!("{} does not support lighting", def.name));
     }
-    with_retry(3, "get brightness", || {
-        device.get_brightness(NOSTORE, led).map_err(|e| e.to_string())
-    })
+    device.get_brightness(NOSTORE, led).map_err(|e| e.to_string())
 }
 
 pub fn cmd_polling(device: &Device, def: &DeviceDef, hz: u16) -> Result<(), String> {
     if !def.capabilities.polling_rate {
         return Err(format!("{} does not support polling rate", def.name));
     }
-    with_retry(3, "set polling", || {
-        device.set_polling_rate(hz).map_err(|e| e.to_string())
-    })
+    device.set_polling_rate(hz).map_err(|e| e.to_string())
 }
 
 pub fn cmd_get_polling(device: &Device, def: &DeviceDef) -> Result<u16, String> {
     if !def.capabilities.polling_rate {
         return Err(format!("{} does not support polling rate", def.name));
     }
-    match with_retry(3, "get polling", || {
-        device.get_polling_rate().map_err(|e| e.to_string())
-    })? {
+    match device.get_polling_rate().map_err(|e| e.to_string())? {
         Some(hz) => Ok(hz),
         None => Err(format!("{}: polling rate unknown (unrecognized wire code)", def.name)),
     }
@@ -636,8 +613,8 @@ pub fn resolve_pid(
     Ok((pid, remaining))
 }
 
-/// Open a device by PID, then put it in driver mode so it accepts config
-/// commands. Best-effort on the mode switch — some devices don't need it.
+/// Open a device by PID, then put it in driver mode so it accepts config commands.
+/// Best-effort on the mode switch — some devices don't need it.
 pub fn open_device<'a>(api: &HidApi, registry: &'a Registry, pid: u16) -> Result<(Device, &'a DeviceDef), String> {
     let Some(definition) = registry.find_by_pid(pid) else {
         return Err(format!("PID {pid:#06x} is not in the device registry"));
@@ -653,37 +630,14 @@ pub fn open_device<'a>(api: &HidApi, registry: &'a Registry, pid: u16) -> Result
         })
     };
 
-    // Put the device in driver mode (OpenRazer does this on daemon startup).
-    // Without it some devices intermittently reject commands with 0x05.
+    // Optionally put the device in driver mode (OpenRazer does this on daemon startup).
+    // Without it some devices may intermittently reject commands with 0x05.
     let _ = device.set_device_mode(mode::DRIVER);
 
     Ok((device, definition))
 }
 
-/// Retry a device operation up to `max_attempts` times with a delay between
-/// attempts. The razer-hid transport already retries on BUSY internally (5×10ms),
-/// but some devices need more recovery time for intermittent NOT_SUPPORTED or
-/// BusyExhausted errors.
-fn with_retry<T>(max_attempts: u32, label: &str, mut f: impl FnMut() -> Result<T, String>) -> Result<T, String> {
-    let mut last_err = String::new();
-    for attempt in 0..max_attempts {
-        match f() {
-            Ok(v) => return Ok(v),
-            Err(e) => {
-                last_err = e;
-                if attempt + 1 < max_attempts {
-                    eprintln!("retrying {label} (attempt {}/{max_attempts}): {last_err}", attempt + 1);
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-            }
-        }
-    }
-    Err(last_err)
-}
-
-/// Apply a DeviceSettings bundle to an open device. Lighting uses NOSTORE
-/// (volatile); DPI uses VARSTORE (persistent — devices reject NOSTORE with
-/// status 0x05 NOT_SUPPORTED).
+/// Apply profile settings bundle to an open device.
 fn apply_settings(device: &Device, def: &DeviceDef, settings: &ProfileSettings) -> Result<(), String> {
     if def.capabilities.lighting {
         if let Some(zone) = settings.global_zone {

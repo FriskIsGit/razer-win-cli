@@ -144,18 +144,15 @@ Proto/
 The prototype handles two intermittent issues observed on the DeathAdder Elite,
 both **in `src/main.rs`** (the vendored crate is untouched):
 
-1. **Driver mode** — `open_device()` calls `set_device_mode(DRIVER)` after
-   opening. Without this, some devices intermittently reject config commands
+1. **Driver mode** — `open_device()` calls `set_device_mode(DRIVER)` after opening. 
+   Without this, some devices may intermittently reject config commands
    with status `0x05` (NOT_SUPPORTED). OpenRazer does this on daemon startup.
 
-2. **Retry wrapper** — `with_retry()` wraps each device command with up to 3
-   attempts (100ms apart). The transport layer's internal retry (5×10ms on
-   BUSY) usually isn't enough; the outer retry catches intermittent
-   `BusyExhausted` and `NOT_SUPPORTED` errors.
-
-3. **VARSTORE for DPI** — DPI commands use `VARSTORE` (0x01), not `NOSTORE`
-   (0x00). Devices reject `NOSTORE` for DPI with `0x05 NOT_SUPPORTED`. Lighting
-   commands use `NOSTORE` (volatile). This matches the `ctl.rs` example.
+2. **Persistence** — Testing has revealed that both `VARSTORE` (0x01) and `NOSTORE` (0x00)
+   are supported for DPI, polling, and lighting commands. 
+   The ctl.rs examples use `VARSTORE` for DPI and `NOSTORE` for lighting. 
+   This convention was followed because DPI settings are generally expected to persist, 
+   while lighting settings are less important to store and can be treated as volatile.
 
 ## License
 

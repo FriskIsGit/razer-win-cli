@@ -210,13 +210,13 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
             match brightness {
                 Some(value) => {
                     cmd::cmd_brightness(&device, def, value, led)?;
-                    let percentage = value as usize * 100 / 255;
-                    println!("{mouse_name}: set brightness {value}/255 ({percentage}%) on LED {led:#04x}");
+                    let percentage = to_brightness_percentage(value);
+                    println!("{mouse_name}: set brightness {value}/255 ({percentage}) on LED {led:#04x}");
                 },
                 None => {
                     let value = cmd::cmd_get_brightness(&device, def, led)?;
-                    let percentage = value as usize * 100 / 255;
-                    println!("{mouse_name}: brightness {value}/255 ({percentage}%) on LED {led:#04x}");
+                    let percentage = to_brightness_percentage(value);
+                    println!("{mouse_name}: brightness {value}/255 ({percentage}) on LED {led:#04x}");
                 }
             }
             Ok(())
@@ -266,6 +266,10 @@ fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String
         }
         other => Err(format!("unknown command {other:?}")),
     }
+}
+
+fn to_brightness_percentage(brightness: u8) -> String {
+    return (brightness as usize * 100 / 255).to_string() + " %"
 }
 
 fn to_vec_u16(vec: &Vec<String>, from: usize) -> Result<Vec<u16>, String> {

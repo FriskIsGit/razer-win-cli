@@ -2,7 +2,7 @@ use std::cmp::{max, PartialEq};
 use hidapi::HidApi;
 use razer_hid::{Device, DeviceDef, LedRegion, Registry};
 use razer_hid::commands::lighting::Rgb;
-use crate::cmd;
+use crate::{cmd, to_brightness_percentage};
 use crate::cmd::{
     apply_profile, cmd_dpi, cmd_get_dpi, cmd_get_polling, cmd_polling, list_profiles, load_profile,
 };
@@ -61,6 +61,7 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
     let (mut x, mut y) = cmd_get_dpi(&device, definition).unwrap_or_default();
     let mut polling = cmd_get_polling(&device, definition).unwrap_or_default();
     let mut polling_index = POLLING_TABLE.iter().position(|p| *p == polling).unwrap_or_default();
+    let mut lighting_state = LightingState::read_initial(&device, definition);
 
     let mut menu_items = build_menu_items(definition, x, y, polling);
 
@@ -153,7 +154,7 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
             KeyCode::Enter => {
                 match index {
                     LIGHTING_INDEX => {
-                        start_lighting_menu(&device, definition, &mut buffer);
+                        start_lighting_menu(&device, definition, &mut lighting_state, &mut buffer);
                     },
                     PROFILES_INDEX => {
                         start_profiles_menu(&device, definition, &mut buffer);
@@ -270,15 +271,14 @@ fn start_profiles_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
     }
 }
 
-fn start_lighting_menu(device: &Device, definition: &DeviceDef, buffer: &mut String) {
-    let mut state = LightingState::read_initial(device, definition);
+fn start_lighting_menu(device: &Device, definition: &DeviceDef, state: &mut LightingState, buffer: &mut String) {
     let mut index = 0;
     let mut status: Option<String> = None;
 
     loop {
         crate::inputs::clear_console();
 
-        draw_lighting_ui(buffer, index, &state, &status);
+        draw_lighting_ui(buffer, index, state, &status);
         println!("{buffer}");
         buffer.clear();
 
@@ -297,10 +297,10 @@ fn start_lighting_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
                 }
             }
             KeyCode::ArrowLeft | KeyCode::Char('a') | KeyCode::Char('A') => {
-                adjust_lighting(device, definition, index, -1, &mut state, &mut status);
+                adjust_lighting(device, definition, index, -1, state, &mut status);
             }
             KeyCode::ArrowRight | KeyCode::Char('d') | KeyCode::Char('D') => {
-                adjust_lighting(device, definition, index, 1, &mut state, &mut status);
+                adjust_lighting(device, definition, index, 1, state, &mut status);
             }
             _ => {}
         }
@@ -392,7 +392,7 @@ fn step_lighting_row(index: usize, signum: i8, state: &mut LightingState, defini
         },
         LIGHTING_ROW_LINK_ZONES => {
             state.link_zones = !state.link_zones;
-            false
+            true
         },
         _ => unreachable!("index is always within lighting rows")
     };
@@ -443,7 +443,6 @@ fn adjust_lighting(
     if !step_lighting_row(index, signum, state, &definition) {
         return;
     }
-    // TODO: Review whether lighting can persist
     let (zone_index, _) = select_zone_index_with_label(state);
     let led_ids;
     let zone = &state.zones[zone_index];
@@ -527,7 +526,7 @@ fn draw_lighting_options(s: &mut String, index: usize, state: &LightingState) {
         UiRow::new("COLOR R", zone.color[0].to_string()),
         UiRow::new("COLOR G", zone.color[1].to_string()),
         UiRow::new("COLOR B", zone.color[2].to_string()),
-        UiRow::new("BRIGHTNESS", zone.brightness.to_string()),
+        UiRow::new("BRIGHTNESS", to_brightness_percentage(zone.brightness)),
         UiRow::new("LINK ZONES", state.link_zones.to_string()),
     ];
     // Find widest item
