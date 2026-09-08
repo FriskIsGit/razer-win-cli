@@ -8,6 +8,10 @@ to its configuration structure to support additional configuration values.
 The **hidapi-rs** bindings library is vendored under `crates/hidapi-rs` with a minimal compatibility modification 
 replacing `GetOverlappedResultEx` with `GetOverlappedResult` for broader Windows compatibility.
 
+## Preview
+<img width="657" height="307" alt="main" src="https://github.com/user-attachments/assets/a8e4c2f7-c90f-496b-acce-d10081e4adb5" />
+<img width="665" height="428" alt="lighting" src="https://github.com/user-attachments/assets/81c8ed64-2db3-4403-9ef7-c44604cf4862" />
+
 ## Building
 Prerequisite: [Rust](https://www.rust-lang.org/tools/install)
 
