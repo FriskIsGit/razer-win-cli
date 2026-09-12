@@ -119,8 +119,8 @@ Proto/
 ├── FINDINGS.md          # codebase analysis findings
 ├── README.md            # this file
 ├── crates/
-|   ├── hidapi-rs/         # vendored bindings library (MODIFIED)
-│   └── razer-hid/         # vendored protocol library (UNMODIFIED)
+|   ├── hidapi-rs/         # vendored bindings library
+│   └── razer-hid/         # vendored protocol library
 │       ├── Cargo.toml
 │       └── src/
 │           ├── lib.rs       # crate root + re-exports

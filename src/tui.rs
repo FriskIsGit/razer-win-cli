@@ -481,7 +481,7 @@ fn adjust_lighting(
 
 fn draw_lighting_ui(buffer: &mut String, index: usize, state: &LightingState, status: &Option<String>) {
     draw_top(buffer);
-    box_content(buffer, "< BACK");
+    box_and_side_pad(buffer, "< BACK", "LIGHTING");
     draw_separator(buffer);
     let (zone_index, _) = select_zone_index_with_label(state);
     draw_lighting_color_bar(buffer, state.zones[zone_index].color);
@@ -630,7 +630,7 @@ fn profile_summary_for(profile: &Profile) -> String {
 
 fn draw_profiles_ui(buffer: &mut String, profiles: &[ProfileEntry], index: usize, status: &Option<String>) {
     draw_top(buffer);
-    box_content(buffer, "< BACK");
+    box_and_side_pad(buffer, "< BACK", "PROFILES");
     draw_separator(buffer);
     if profiles.is_empty() {
         box_content(buffer, "(no saved profiles)");
@@ -729,6 +729,24 @@ fn box_content(s: &mut String, content: &str) {
             push_box_line(s, &chunk);
         }
     }
+}
+
+fn box_and_side_pad(s: &mut String, left_content: &str, right_content: &str) {
+    // Includes both `|` characters, leading & trailing space.
+    let target_width = TOTAL_WIDTH - 4;
+
+    let content_width = left_content.chars().count() + right_content.chars().count();
+    let padding = target_width - content_width;
+    s.push(VERTICAL);
+    s.push(' ');
+    s.push_str(left_content);
+    for _ in 0..padding {
+        s.push(' ');
+    }
+    s.push_str(right_content);
+    s.push(' ');
+    s.push(VERTICAL);
+    s.push('\n');
 }
 
 fn push_box_line(s: &mut String, content: &str) {
