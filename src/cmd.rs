@@ -3,7 +3,6 @@ use std::env;
 use std::ffi::OsString;
 use std::fs::{create_dir_all, read_dir, read_to_string, remove_file, write};
 use std::path::PathBuf;
-use std::time::Duration;
 use hidapi::HidApi;
 use razer_hid::{Device, DeviceDef, Registry, TransportError, RAZER_VID};
 use razer_hid::commands::dpi::DpiStage;
@@ -233,17 +232,16 @@ pub fn set_brightness(device: &Device, led: u8, brightness: u8) -> Result<(), St
 }
 
 const WAVE_EFFECT_DIRECTION: u8 = 0x01;
-const REACTIVE_EFFECT_SPEED: u8 = 0x02;
 
 /// Send a lighting effect to the device. Uses NOSTORE (volatile) storage but VARSTORE is supported.
-pub fn set_effect(device: &Device, led: u8, effect: Effect, color: Rgb) -> Result<(), String> {
+pub fn set_effect(device: &Device, led: u8, effect: Effect, color: Rgb, speed: u8) -> Result<(), String> {
     match effect {
         Effect::None => device.set_effect_none(NOSTORE, led),
         Effect::Static => device.set_static_color(NOSTORE, led, color),
         Effect::Breathing => device.set_effect_breathing_single(NOSTORE, led, color),
         Effect::Spectrum => device.set_effect_spectrum(NOSTORE, led),
         Effect::Wave => device.set_effect_wave(NOSTORE, led, WAVE_EFFECT_DIRECTION),
-        Effect::Reactive => device.set_effect_reactive(NOSTORE, led, REACTIVE_EFFECT_SPEED, color),
+        Effect::Reactive => device.set_effect_reactive(NOSTORE, led, speed, color),
         Effect::Starlight | Effect::Custom => todo!(),
     }.map_err(|e| e.to_string())
 }
@@ -258,7 +256,7 @@ pub fn cmd_effect(
     if !def.capabilities.lighting {
         return Err(format!("{} does not support lighting", def.name));
     }
-    set_effect(&device, led, effect,rgb)?;
+    set_effect(&device, led, effect,rgb, DEFAULT_SPEED)?;
     println!("{}: set effect {:?} on LED {led:#04x}", def.name, effect);
     Ok(())
 }
@@ -274,7 +272,7 @@ pub fn cmd_effect_all(
     }
     for region in &def.led_regions {
         let led = region.id;
-        set_effect(&device, led, effect,rgb)?;
+        set_effect(&device, led, effect,rgb, DEFAULT_SPEED)?;
         println!("{}: set effect {:?} on LED {led:#04x}", def.name, effect);
     }
     Ok(())
@@ -329,6 +327,7 @@ pub fn cmd_battery(device: &Device, def: &DeviceDef) -> Result<Battery, String> 
 // =========================================================================
 
 const DEFAULT_COLOR: Rgb = [0, 255, 0];
+const DEFAULT_SPEED: u8 = 2;
 
 pub fn cmd_profile_save(_api: &HidApi, _registry: &Registry, args: &[String]) -> Result<(), String> {
     let Some(name) = args.first() else {
@@ -342,6 +341,7 @@ pub fn cmd_profile_save(_api: &HidApi, _registry: &Registry, args: &[String]) ->
         led_id: 0,
         effect: Effect::Static,
         color: DEFAULT_COLOR,
+        speed: DEFAULT_SPEED,
         brightness: 128
     };
 
@@ -387,6 +387,15 @@ pub fn cmd_profile_save(_api: &HidApi, _registry: &Registry, args: &[String]) ->
                 zone.brightness = brightness;
                 i += 2;
             }
+            "--speed" => {
+                if i + 1 >= args.len() {
+                    return Err("--speed requires <1-4>".into());
+                }
+                let speed = args[i + 1].parse::<u8>().map_err(|e| e.to_string())?;
+                let zone = get_zone_or(&mut settings.lighting_zones, led, &mut global_zone);
+                zone.speed = speed;
+                i += 2;
+            }
             "--polling" => {
                 if i + 1 >= args.len() {
                     return Err("--polling requires <hz>".into());
@@ -406,6 +415,7 @@ pub fn cmd_profile_save(_api: &HidApi, _registry: &Registry, args: &[String]) ->
                         led_id: parsed_led,
                         effect: Effect::Static,
                         color: DEFAULT_COLOR,
+                        speed: DEFAULT_SPEED,
                         brightness: 128
                     };
                     settings.lighting_zones.push(zone)
@@ -644,7 +654,7 @@ fn apply_settings(device: &Device, def: &DeviceDef, settings: &ProfileSettings) 
             cmd_effect_all(device, def, zone.effect, zone.color)?
         } else if !settings.lighting_zones.is_empty() {
             for zone in &settings.lighting_zones {
-                set_effect(device, zone.led_id, zone.effect, zone.color)?;
+                set_effect(device, zone.led_id, zone.effect, zone.color, zone.speed)?;
                 set_brightness(device, zone.led_id, zone.brightness)?;
             }
         }

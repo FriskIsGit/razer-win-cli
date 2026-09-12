@@ -86,12 +86,13 @@ LIGHTING / RGB:
 
 PROFILES:
   profile save <name> [flags]  Save settings as a named profile
-    --dpi <x> <y>              DPI to save
+    --dpi <x> <y>              DPI on X,Y axis
     --polling <hz>             Polling rate
     --led <id>                 Select an LED zone
-    --effect <e>               Lighting effect
-    --rgb <r> <g> <b>          RGB colour
-    --brightness <0-255>       Brightness
+    --effect <e>               Led's lighting effect
+    --speed <1-4>              Effect speed
+    --rgb <r> <g> <b>          Led's RGB color
+    --brightness <0-255>       Led's brightness
 
   profile list                 List saved profiles
   profile apply <name>         Apply a saved profile to connected devices

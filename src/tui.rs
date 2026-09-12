@@ -17,7 +17,7 @@ const LEFT_T: char = '├';
 const RIGHT_T: char = '┤';
 const HORIZONTAL: char = '─';
 const VERTICAL: char = '│';
-const WIDTH: usize = 48;
+const TOTAL_WIDTH: usize = 48;
 const DPI_STEP: u16 = 50;
 
 const DPI_X_INDEX: usize = 0;
@@ -34,11 +34,14 @@ const LIGHTING_ROW_COLOR_R: usize = 2;
 const LIGHTING_ROW_COLOR_G: usize = 3;
 const LIGHTING_ROW_COLOR_B: usize = 4;
 const LIGHTING_ROW_BRIGHTNESS: usize = 5;
-const LIGHTING_ROW_LINK_ZONES: usize = 6;
-const LIGHTING_ROWS: usize = 7;
+const LIGHTING_ROW_SPEED: usize = 6;
+const LIGHTING_ROW_LINK_ZONES: usize = 7;
+
+const LIGHTING_ROWS: usize = 8;
 const LIGHTING_STEP: i8 = 16;
 
 const DEFAULT_COLOR: Rgb = [0, 255, 0];
+const DEFAULT_SPEED: u8 = 2;
 
 fn effect_name(effect: Effect) -> &'static str {
     match effect {
@@ -312,6 +315,7 @@ struct ZoneState {
     effect: Effect,
     color: [u8; 3],
     brightness: u8,
+    speed: u8,
     region: LedRegion,
 }
 
@@ -341,6 +345,7 @@ impl LightingState {
                 effect: Effect::Static,
                 color: DEFAULT_COLOR,
                 brightness: current_brightness.unwrap_or(255),
+                speed: DEFAULT_SPEED,
                 region: led_region.clone()
             };
             state.zones.push(zone);
@@ -390,6 +395,11 @@ fn step_lighting_row(index: usize, signum: i8, state: &mut LightingState, defini
             zone.brightness = step_u8(zone.brightness, signum * LIGHTING_STEP);
             true
         },
+        LIGHTING_ROW_SPEED => {
+            let zone = &mut state.zones[zone_index];
+            zone.speed = step_u8_clamp(zone.speed, signum, 1, 4);
+            true
+        },
         LIGHTING_ROW_LINK_ZONES => {
             state.link_zones = !state.link_zones;
             true
@@ -397,7 +407,7 @@ fn step_lighting_row(index: usize, signum: i8, state: &mut LightingState, defini
         _ => unreachable!("index is always within lighting rows")
     };
     let zone = &state.zones[zone_index];
-    let (brightness, color, effect) = (zone.brightness, zone.color, zone.effect);
+    let (brightness, color, effect, speed) = (zone.brightness, zone.color, zone.effect, zone.speed);
 
     // Keep other zones in sync if they're linked
     if modified && state.link_zones {
@@ -405,6 +415,7 @@ fn step_lighting_row(index: usize, signum: i8, state: &mut LightingState, defini
             a_zone.brightness = brightness;
             a_zone.color = color;
             a_zone.effect = effect;
+            a_zone.speed = speed;
         }
     }
     return modified;
@@ -427,6 +438,10 @@ fn effect_index(effects: &Vec<Effect>, effect: Effect) -> usize {
 
 fn step_u8(value: u8, delta: i8) -> u8 {
     (value as i16).saturating_add(delta as i16).clamp(0, 255) as u8
+}
+
+fn step_u8_clamp(value: u8, delta: i8, min: i16, max: i16) -> u8 {
+    (value as i16).saturating_add(delta as i16).clamp(min, max) as u8
 }
 
 /// Step the selected lighting row and send the result to the device.
@@ -452,7 +467,7 @@ fn adjust_lighting(
         led_ids = vec![zone.region.id];
     }
     for led in led_ids {
-        if let Err(e) = cmd::set_effect(device, led , zone.effect, zone.color) {
+        if let Err(e) = cmd::set_effect(device, led , zone.effect, zone.color, zone.speed) {
             *status = Some(format!("set effect failed: {e}"));
             continue;
         }
@@ -527,6 +542,7 @@ fn draw_lighting_options(s: &mut String, index: usize, state: &LightingState) {
         UiRow::new("COLOR G", zone.color[1].to_string()),
         UiRow::new("COLOR B", zone.color[2].to_string()),
         UiRow::new("BRIGHTNESS", to_brightness_percentage(zone.brightness)),
+        UiRow::new("SPEED", zone.speed.to_string()),
         UiRow::new("LINK ZONES", state.link_zones.to_string()),
     ];
     // Find widest item
@@ -555,7 +571,7 @@ fn draw_lighting_options(s: &mut String, index: usize, state: &LightingState) {
 fn draw_lighting_color_bar(s: &mut String, color: [u8; 3]) {
     let label = "Color: ";
     let rgb = format!(" RGB({}, {}, {})", color[0], color[1], color[2]);
-    let bar_width = WIDTH - 1 - label.len() - rgb.len();
+    let bar_width = TOTAL_WIDTH - 3 - label.len() - rgb.len();
     let bar = " ".repeat(bar_width);
     let bg = format!("\x1b[48;2;{};{};{}m", color[0], color[1], color[2]);
     let reset = "\x1b[0m";
@@ -620,7 +636,7 @@ fn draw_profiles_ui(buffer: &mut String, profiles: &[ProfileEntry], index: usize
         box_content(buffer, "(no saved profiles)");
     } else {
         for (i, entry) in profiles.iter().enumerate() {
-            let marker = if i == index { " > " } else { "   " };
+            let marker = if i == index { "> " } else { "  " };
             box_content(buffer, &format!("{marker}{}", entry.name));
             box_content(buffer, &format!("    {}", entry.summary));
         }
@@ -693,20 +709,34 @@ fn draw_bottom(s: &mut String) {
 }
 
 fn draw_horizontal_line(s: &mut String) {
-    for _ in 0..WIDTH {
+    for _ in 0..TOTAL_WIDTH-2 {
         s.push(HORIZONTAL);
     }
 }
 
 
 fn box_content(s: &mut String, content: &str) {
-    // Truncate so long content (e.g. 64-char profile names) can't break the box.
-    let truncated: String = content.chars().take(WIDTH - 1).collect();
+    // Includes both `|` characters and leading space.
+    let target_width = TOTAL_WIDTH - 3;
+
+    for line in content.lines() {
+        let chars: Vec<char> = line.chars().collect();
+        if chars.is_empty() {
+            continue;
+        }
+        for chunk in chars.chunks(target_width) {
+            let chunk: String = chunk.iter().collect();
+            push_box_line(s, &chunk);
+        }
+    }
+}
+
+fn push_box_line(s: &mut String, content: &str) {
+    let target_width = TOTAL_WIDTH - 3;
+    let padding = target_width - content.chars().count();
     s.push(VERTICAL);
     s.push(' ');
-    s.push_str(&truncated);
-    let content_width = truncated.chars().count();
-    let padding = WIDTH.saturating_sub(content_width + 1);
+    s.push_str(content);
     for _ in 0..padding {
         s.push(' ');
     }

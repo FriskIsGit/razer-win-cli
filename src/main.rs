@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use hidapi::HidApi;
 use razer_hid::commands::lighting::{led_id, Rgb};
-use razer_hid::{DeviceDef, Registry};
+use razer_hid::{Registry};
 
 // =========================================================================
 // Profile model (mirrors the app's profiles.rs domain model)
@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use razer_hid::registry::Effect;
 use crate::cmd::open_device;
 
+fn default_speed() -> u8 { 2 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 struct ZoneSettings {
@@ -25,6 +26,8 @@ struct ZoneSettings {
     effect: Effect,
     color: [u8; 3],
     brightness: u8,
+    #[serde(default = "default_speed")]
+    speed: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -388,8 +391,9 @@ PROFILES:
     --polling <hz>             Polling rate
     --led <id>                 Select an LED zone
     --effect <e>               Lighting effect
-    --rgb <r> <g> <b>          RGB colour
+    --rgb <r> <g> <b>          RGB color
     --brightness <0-255>       Brightness
+    --speed <1-4>              Effect speed
 
   profile list                 List saved profiles
   profile apply <name>         Apply a saved profile to connected devices
