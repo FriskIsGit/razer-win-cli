@@ -263,6 +263,33 @@ if ext != "mp3" {
 }
 ```
 
+## Prefer explicit bounds checks over saturating_sub for simple cursor logic
+When stepping or clamping involves only one or two conditions, write the comparisons directly
+so the intent is visible at a glance. 
+`saturating_sub` hides two behaviors behind arithmetic: the underflow floor and the clamp. 
+Reach for `saturating_sub` when several floors stack up and the explicit form would need a nested if per step.
+
+```rs
+// Bad: two hidden behaviors buried in arithmetic.
+index = index.min(entries.len().saturating_sub(1));
+```
+
+```rs
+// Good: the condition reads as what actually happens.
+if index >= entries.len() && index > 0 {
+    index -= 1;
+}
+```
+
+Keep `saturating_sub` for chains where each subtraction can underflow on its own.
+```rs
+// Good: explicit guards would need a nested if per step.
+let free_space = capacity
+    .saturating_sub(header_size)
+    .saturating_sub(checksum_size)
+    .saturating_sub(alignment_padding);
+```
+
 ## Prefer Robust Step-by-Step Logic Over Functional Conciseness
 ```rs
 // Avoid (Overly functional) - harder to debug and read for simple validation

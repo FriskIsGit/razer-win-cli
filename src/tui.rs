@@ -4,10 +4,11 @@ use razer_hid::{Device, DeviceDef, LedRegion, Registry};
 use razer_hid::commands::lighting::Rgb;
 use crate::{cmd, to_brightness_percentage};
 use crate::cmd::{
-    apply_profile, cmd_dpi, cmd_get_dpi, cmd_get_polling, cmd_polling, list_profiles, load_profile,
+    apply_profile, cmd_dpi, cmd_get_dpi, cmd_get_polling, cmd_polling, delete_profile,
+    list_profiles, load_profile, save_profile, validate_profile_name,
 };
 use crate::inputs::KeyCode;
-use crate::{Effect, Profile};
+use crate::{DpiSettings, Effect, Profile, ProfileSettings, ZoneSettings};
 
 const TOP_LEFT: char = '┌';
 const TOP_RIGHT: char = '┐';
@@ -160,7 +161,7 @@ pub fn start(api: HidApi, registry: Registry) -> Result<(), String> {
                         start_lighting_menu(&device, definition, &mut lighting_state, &mut buffer);
                     },
                     PROFILES_INDEX => {
-                        start_profiles_menu(&device, definition, &mut buffer);
+                        start_profiles_menu(&device, definition, &mut buffer, &mut lighting_state);
                         (x, y) = cmd_get_dpi(&device, definition).unwrap_or_default();
                         polling = cmd_get_polling(&device, definition).unwrap_or_default();
                         menu_items[DPI_X_INDEX].value = x.to_string();
@@ -232,8 +233,13 @@ fn draw_ui(buffer: &mut String, definition: &DeviceDef, index: usize, menu_items
     draw_bottom(buffer);
 }
 
-fn start_profiles_menu(device: &Device, definition: &DeviceDef, buffer: &mut String) {
-    let profiles = load_profile_entries();
+fn start_profiles_menu(
+    device: &Device,
+    definition: &DeviceDef,
+    buffer: &mut String,
+    lighting_state: &mut LightingState,
+) {
+    let mut profiles = load_profile_entries();
     let mut index = 0;
     let mut status: Option<String> = None;
 
@@ -265,11 +271,185 @@ fn start_profiles_menu(device: &Device, definition: &DeviceDef, buffer: &mut Str
                 }
                 let name = &profiles[index].name;
                 match apply_profile(device, definition, name) {
-                    Ok(()) => status = Some(format!("applied {name}")),
+                    Ok(profile) => {
+                        status = Some(format!("applied {name}"));
+                        sync_lighting_from_profile(definition, lighting_state, &profile.settings);
+                    }
                     Err(e) => status = Some(format!("failed to apply {name}: {e}")),
                 }
             }
+            KeyCode::Delete => {
+                if profiles.is_empty() {
+                    continue;
+                }
+                let name = profiles[index].name.clone();
+                if !confirm_profile_deletion(buffer, &name) {
+                    continue;
+                }
+                match delete_profile(&name) {
+                    Ok(()) => {
+                        status = Some(format!("deleted {name}"));
+                        profiles = load_profile_entries();
+                        if index >= profiles.len() && index > 0 {
+                            index -= 1;
+                        }
+                    }
+                    Err(e) => status = Some(format!("failed to delete {name}: {e}")),
+                }
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') => {
+                let Some(name) = prompt_save_profile_name(buffer) else {
+                    continue;
+                };
+                let (x, y) = cmd_get_dpi(device, definition).unwrap_or_default();
+                let polling = cmd_get_polling(device, definition).unwrap_or_default();
+                let settings = profile_settings_from(definition, x, y, polling, lighting_state);
+                let profile = Profile { name, settings };
+                match save_profile(&profile) {
+                    Ok(()) => {
+                        status = Some(format!("saved {}", profile.name));
+                        profiles = load_profile_entries();
+                        if let Some(pos) = profiles.iter().position(|e| e.name == profile.name) {
+                            index = pos;
+                        }
+                    }
+                    Err(e) => status = Some(format!("failed to save {}: {e}", profile.name)),
+                }
+            }
             _ => {}
+        }
+    }
+}
+
+/// Prompt for a profile name to save the current settings under.
+/// Returns optional profile name
+fn prompt_save_profile_name(buffer: &mut String) -> Option<String> {
+    let mut input = String::new();
+    let mut error: Option<String> = None;
+
+    loop {
+        crate::inputs::clear_console();
+
+        draw_save_prompt_ui(buffer, &input, &error);
+        println!("{buffer}");
+        buffer.clear();
+
+        match crate::inputs::read_key() {
+            KeyCode::Char(c) => {
+                if is_valid_name_char(c) && input.len() < 64 {
+                    input.push(c);
+                }
+            }
+            KeyCode::Space => {
+                if input.len() < 64 {
+                    input.push(' ');
+                }
+            }
+            KeyCode::Backspace => {
+                input.pop();
+            }
+            KeyCode::Escape => return None,
+            KeyCode::Enter => {
+                match validate_profile_name(&input) {
+                    Ok(name) => return Some(name),
+                    Err(e) => error = Some(e),
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn is_valid_name_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '-' || c == '_'
+}
+
+fn confirm_profile_deletion(buffer: &mut String, name: &str) -> bool {
+    loop {
+        crate::inputs::clear_console();
+
+        draw_confirm_delete_ui(buffer, name);
+        println!("{buffer}");
+        buffer.clear();
+
+        match crate::inputs::read_key() {
+            KeyCode::Char('y') | KeyCode::Char('Y') => return true,
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Escape => return false,
+            _ => {}
+        }
+    }
+}
+
+fn zone_settings_from(zone: &ZoneState) -> ZoneSettings {
+    ZoneSettings {
+        led_id: zone.region.id,
+        effect: zone.effect,
+        color: zone.color,
+        brightness: zone.brightness,
+        speed: zone.speed,
+    }
+}
+
+/// Build the profile settings from current device state.
+fn profile_settings_from(
+    definition: &DeviceDef,
+    x: u16,
+    y: u16,
+    polling: u16,
+    lighting_state: &LightingState,
+) -> ProfileSettings {
+    let mut settings = ProfileSettings::default();
+
+    if definition.capabilities.dpi {
+        settings.dpi = Some(DpiSettings { x, y });
+    }
+    if definition.capabilities.polling_rate {
+        settings.polling_hz = Some(polling);
+    }
+
+    if lighting_state.zones.is_empty() {
+        return settings;
+    }
+    if lighting_state.link_zones {
+        settings.global_zone = Some(zone_settings_from(&lighting_state.zones[0]));
+    } else {
+        for zone in &lighting_state.zones {
+            settings.lighting_zones.push(zone_settings_from(zone));
+        }
+    }
+    settings
+}
+
+/// Update the TUI's tracked lighting state after a profile was applied.
+/// Lighting settings cannot be read back from the device.
+fn sync_lighting_from_profile(
+    definition: &DeviceDef,
+    lighting_state: &mut LightingState,
+    settings: &ProfileSettings,
+) {
+    if !definition.capabilities.lighting {
+        return;
+    }
+
+    match settings.global_zone {
+        Some(global) => {
+            for zone in &mut lighting_state.zones {
+                zone.effect = global.effect;
+                zone.color = global.color;
+                zone.brightness = global.brightness;
+                zone.speed = global.speed;
+            }
+        }
+        None => {
+            for zone_settings in &settings.lighting_zones {
+                let Some(zone) = lighting_state.zones.iter_mut().find(|z| z.region.id == zone_settings.led_id) else {
+                    continue;
+                };
+                zone.effect = zone_settings.effect;
+                zone.color = zone_settings.color;
+                zone.brightness = zone_settings.brightness;
+                zone.speed = zone_settings.speed;
+            }
         }
     }
 }
@@ -492,7 +672,7 @@ fn draw_lighting_ui(buffer: &mut String, index: usize, state: &LightingState, st
         box_content(buffer, msg);
         draw_separator(buffer);
     }
-    draw_sub_menu_navigation(buffer);
+    box_content(buffer, "[↑/↓] Navigate  [←/→] Change  [Bksp] Back");
     draw_bottom(buffer);
 }
 
@@ -646,7 +826,33 @@ fn draw_profiles_ui(buffer: &mut String, profiles: &[ProfileEntry], index: usize
         box_content(buffer, msg);
         draw_separator(buffer);
     }
-    draw_sub_menu_navigation(buffer);
+    box_content(buffer, "[↑/↓] Select  [Enter] Apply  [Bksp] Back");
+    box_content(buffer, "[n] Save current  [Del] Delete");
+    draw_bottom(buffer);
+}
+
+fn draw_save_prompt_ui(buffer: &mut String, input: &str, error: &Option<String>) {
+    draw_top(buffer);
+    box_and_side_pad(buffer, "< BACK", "SAVE PROFILE");
+    draw_separator(buffer);
+    box_content(buffer, "Save current settings as:");
+    box_content(buffer, &format!("name: {input}_"));
+    draw_separator(buffer);
+    if let Some(err) = error {
+        box_content(buffer, err);
+        draw_separator(buffer);
+    }
+    box_content(buffer, "[Enter] Save  [Bksp] Edit  [Esc] Cancel");
+    draw_bottom(buffer);
+}
+
+fn draw_confirm_delete_ui(buffer: &mut String, name: &str) {
+    draw_top(buffer);
+    box_and_side_pad(buffer, "< BACK", "DELETE PROFILE");
+    draw_separator(buffer);
+    box_content(buffer, &format!("Delete {name}?"));
+    draw_separator(buffer);
+    box_content(buffer, "[y] Yes  [n] No");
     draw_bottom(buffer);
 }
 
@@ -681,10 +887,6 @@ fn draw_options(s: &mut String, index: usize, items: &[UiRow; 5], _edit_mode: bo
 
 fn draw_main_menu_navigation(s: &mut String) {
     box_content(s, "[↑/↓] Navigate  [←/→] Change  [q] Quit");
-}
-
-fn draw_sub_menu_navigation(s: &mut String) {
-    box_content(s, "[↑/↓] Navigate  [←/→] Change  [Bksp] Back");
 }
 
 fn draw_separator(s: &mut String) {

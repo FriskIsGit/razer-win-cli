@@ -9,6 +9,7 @@ pub enum KeyCode {
     ArrowDown,
     ArrowRight,
     ArrowLeft,
+    Delete,
     Other(u64),
     Error,
 }
@@ -164,11 +165,11 @@ pub(crate) mod windows {
                 if key.character_data != 0 {
                     let data = key.character_data;
                     match key.character_data  {
-                        65..=90 | 97..=122 => return KeyCode::Char(char::from_u32_unchecked(data as u32)),
                         8  => return KeyCode::Backspace,
                         13 => return KeyCode::Enter,
                         27 => return KeyCode::Escape,
                         32 => return KeyCode::Space,
+                        33..=126 => return KeyCode::Char(char::from_u32_unchecked(data as u32)),
                         _  => return KeyCode::Other(data as u64),
                     }
                 }
@@ -178,6 +179,7 @@ pub(crate) mod windows {
                     0x26 => return KeyCode::ArrowUp,
                     0x27 => return KeyCode::ArrowRight,
                     0x28 => return KeyCode::ArrowDown,
+                    0x2E => return KeyCode::Delete,
                     _    => continue,
                 }
             }
@@ -302,15 +304,16 @@ pub(crate) mod unix {
             tcsetattr(STDIN, TCSANOW, &old_settings as *const Termios);
 
             match data {
-                65..=90 | 97..=122 => return KeyCode::Char(char::from_u32_unchecked(data as u32)),
                 10  => return KeyCode::Enter,
                 27  => return KeyCode::Escape,
                 32  => return KeyCode::Space,
                 127 => return KeyCode::Backspace,
+                33..=126 => return KeyCode::Char(char::from_u32_unchecked(data as u32)),
                 0x445b1b => return KeyCode::ArrowLeft,
                 0x415b1b => return KeyCode::ArrowUp,
                 0x435b1b => return KeyCode::ArrowRight,
                 0x425b1b => return KeyCode::ArrowDown,
+                0x7e335b1b => return KeyCode::Delete,
                 _ => return KeyCode::Other(data),
             }
         }

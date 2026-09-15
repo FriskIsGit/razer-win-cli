@@ -489,9 +489,10 @@ pub fn cmd_profile_delete(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn apply_profile(device: &Device, def: &DeviceDef, name: &str) -> Result<(), String> {
+pub fn apply_profile(device: &Device, def: &DeviceDef, name: &str) -> Result<Profile, String> {
     let profile = load_profile(name)?;
-    apply_settings(device, def, &profile.settings)
+    apply_settings(device, def, &profile.settings)?;
+    Ok(profile)
 }
 
 // =========================================================================
@@ -526,7 +527,7 @@ fn profile_path(name: &str) -> Result<PathBuf, String> {
     Ok(profiles_dir().join(json_name))
 }
 
-fn save_profile(profile: &Profile) -> Result<(), String> {
+pub fn save_profile(profile: &Profile) -> Result<(), String> {
     create_dir_all(profiles_dir())
         .map_err(|e| e.to_string())?;
 
@@ -572,7 +573,7 @@ pub fn list_profiles() -> Vec<String> {
     names
 }
 
-fn delete_profile(name: &str) -> Result<(), String> {
+pub fn delete_profile(name: &str) -> Result<(), String> {
     let path = profile_path(name)?;
     match remove_file(&path) {
         Ok(()) => Ok(()),
@@ -581,7 +582,7 @@ fn delete_profile(name: &str) -> Result<(), String> {
     }
 }
 
-fn validate_profile_name(name: &str) -> Result<String, String> {
+pub fn validate_profile_name(name: &str) -> Result<String, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() || trimmed.len() > 64 {
         return Err("profile name must be 1-64 chars".to_string());
