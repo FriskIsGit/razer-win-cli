@@ -2,6 +2,7 @@ mod tui;
 mod cmd;
 mod inputs;
 mod device_list;
+mod rebind;
 
 use std::env;
 use std::fmt::{Debug};
@@ -113,37 +114,59 @@ fn parse_hex_to_u8(raw: &str) -> Result<u8, String> {
 
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
-    let is_help = args.iter().any(|s| s == "help" || s == "-h" || s == "--help");
-    let is_version = args.iter().any(|s| s == "version" || s == "-v" || s == "--version");
-    if is_help {
-        println!("{}", usage());
-        return Ok(())
-    }
-    if is_version {
-        println!("{}", version());
-        return Ok(())
-    }
-    let api = HidApi::new().map_err(|e| format!("failed to initialize hidapi: {e}"))?;
-    let registry = load_registry();
 
     let Some(cmd) = args.first() else {
+        let api = HidApi::new().map_err(|e| format!("failed to initialize hidapi: {e}"))?;
+        let registry = load_registry();
         return tui::start(api, registry);
     };
 
     let rest = &args[1..]; // args after the command name
-    return perform_command(api, registry, cmd, rest);
+    return perform_command(cmd, rest);
 }
 
 const DEFAULT_COLOR: Rgb = [0, 255, 0];
 
-fn perform_command(api: HidApi, registry: Registry, cmd: &String, rest: &[String]) -> Result<(), String> {
+fn is_help_token(value: &str) -> bool {
+    value == "help" || value == "-h" || value == "--help"
+}
+
+fn is_version_token(value: &str) -> bool {
+    value == "version" || value == "-v" || value == "--version"
+}
+
+fn wants_help(cmd: &str, rest: &[String]) -> bool {
+    is_help_token(cmd) || rest.iter().any(|value| is_help_token(value))
+}
+
+fn wants_version(cmd: &str, rest: &[String]) -> bool {
+    is_version_token(cmd) || rest.iter().any(|value| is_version_token(value))
+}
+
+fn perform_command(cmd: &str, rest: &[String]) -> Result<(), String> {
+    if wants_help(cmd, rest) {
+        println!("{}", usage());
+        return Ok(());
+    }
+    if wants_version(cmd, rest) {
+        println!("{}", version());
+        return Ok(());
+    }
+    if cmd == "rebind" {
+        return rebind::cmd_rebind(rest);
+    }
+
+    let api = HidApi::new().map_err(|e| format!("failed to initialize hidapi: {e}"))?;
+    let registry = load_registry();
+
+    if cmd == "list" {
+        cmd::cmd_list(&api, &registry);
+        return Ok(());
+    }
+
     let (pid, vals) = cmd::resolve_pid(&api, &registry, rest)?;
     let (device, def) = open_device(&api, &registry, pid)?;
-    match cmd.as_str() {
-        "list" => {
-            cmd::cmd_list(&api, &registry);
-            Ok(())
-        }
+    match cmd {
         "info" => {
             cmd::cmd_info(&device, def)
         }
@@ -362,6 +385,12 @@ DEVICE:
   info                                       Show device details (serial, firmware, capabilities)
   battery                                    Read battery level + charging status
 
+INPUT REMAP (Windows only, experimental):
+  rebind <from> <to> [--seconds <n>]         Global mouse-to-key remap; Ctrl+C to stop
+    from: left, right, middle, back, forward, x1, x2
+    to: a-z, 0-9, f1-f24, enter, space, tab, esc, arrows
+    --seconds <n>                            Stop automatically after n seconds
+
 PERFORMANCE:
   dpi                                        Read current DPI
   dpi <x> [y]                                Set DPI (y defaults to x)
@@ -404,6 +433,7 @@ EXAMPLES:
   cli polling 1000                # polling rate 1000 Hz
   cli color 255 0 128 --led 4     # pink logo LED
   cli effect spectrum             # spectrum cycle
+  cli rebind forward z --seconds 30  # forward side button types z for 30 seconds
   cli profile save Gaming --dpi 1600 1600 --effect static --rgb 255 0 128
 
 NOTES:
