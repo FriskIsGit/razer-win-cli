@@ -1,0 +1,27 @@
+# Razer Naga X (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerNagaX`.
+
+name = "Razer Naga X"
+usb_pid = "0x0096"
+device_type = "mouse"
+transaction_id = "0x1f"
+wait_us = 600
+dpi_min = 100
+dpi_max = 18000
+matrix_dims = [1, 2]
+lighting_effects = ["static", "breathing", "spectrum", "wave", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = true
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "scroll"
+id = 0x01
+
+[[led_regions]]
+name = "left"
+id = 0x11

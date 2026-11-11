@@ -1,0 +1,24 @@
+# Razer DeathAdder 3.5G Black (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerDeathAdder3_5GBlack`.
+# TODO: lighting optimistically assumed (no OpenRazer data); needs real-world testing.
+# TODO: transaction id not listed in the driver; defaulting to 0xFF.
+
+name = "Razer DeathAdder 3.5G Black"
+usb_pid = "0x0029"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 3500
+lighting_effects = ["static", "breathing", "spectrum", "wave", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = false
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "matrix"
+id = 0x00

@@ -1,0 +1,22 @@
+# Razer Ouroboros 2012 (wireless mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerOuroboros`.
+
+name = "Razer Ouroboros 2012"
+usb_pid = "0x0032"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 8200
+lighting_effects = ["none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = false
+polling_rate = true
+battery = true
+
+[[led_regions]]
+name = "scroll"
+id = 0x01

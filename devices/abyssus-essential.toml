@@ -1,0 +1,22 @@
+# Razer Abyssus Essential (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerAbyssusEssential`.
+
+name = "Razer Abyssus Essential"
+usb_pid = "0x006B"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 7200
+lighting_effects = ["static", "breathing", "spectrum", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = false
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "logo"
+id = 0x04

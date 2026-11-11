@@ -1,0 +1,23 @@
+# Razer Atheris (Receiver)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerAtherisReceiver`.
+# TODO: lighting optimistically assumed (no OpenRazer data); needs real-world testing.
+
+name = "Razer Atheris (Receiver)"
+usb_pid = "0x0062"
+device_type = "mouse"
+transaction_id = "0x1f"
+wait_us = 400000
+dpi_min = 100
+dpi_max = 7200
+lighting_effects = ["static", "breathing", "spectrum", "wave", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = true
+polling_rate = true
+battery = true
+
+[[led_regions]]
+name = "matrix"
+id = 0x00

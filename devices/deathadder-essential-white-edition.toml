@@ -1,0 +1,26 @@
+# Razer DeathAdder Essential (White Edition)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerDeathAdderEssentialWhiteEdition`.
+
+name = "Razer DeathAdder Essential (White Edition)"
+usb_pid = "0x0071"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 6400
+lighting_effects = ["static", "breathing", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = false
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "logo"
+id = 0x04
+
+[[led_regions]]
+name = "scroll"
+id = 0x01

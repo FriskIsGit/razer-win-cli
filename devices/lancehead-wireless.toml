@@ -1,0 +1,35 @@
+# Razer Lancehead (Wireless)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerLanceheadWireless`.
+
+name = "Razer Lancehead (Wireless)"
+usb_pid = "0x005A"
+device_type = "mouse"
+transaction_id = "0x3f"
+wait_us = 600
+dpi_min = 100
+dpi_max = 16000
+matrix_dims = [1, 16]
+lighting_effects = ["static", "breathing", "spectrum", "wave", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = true
+polling_rate = true
+battery = true
+
+[[led_regions]]
+name = "logo"
+id = 0x04
+
+[[led_regions]]
+name = "scroll"
+id = 0x01
+
+[[led_regions]]
+name = "left"
+id = 0x11
+
+[[led_regions]]
+name = "right"
+id = 0x10

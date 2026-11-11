@@ -1,0 +1,23 @@
+# Razer Mamba (Wireless)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerMambaChromaWireless`.
+
+name = "Razer Mamba (Wireless)"
+usb_pid = "0x0045"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 16000
+matrix_dims = [1, 15]
+lighting_effects = ["static", "breathing", "spectrum", "wave", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = false
+polling_rate = true
+battery = true
+
+[[led_regions]]
+name = "backlight"
+id = 0x05

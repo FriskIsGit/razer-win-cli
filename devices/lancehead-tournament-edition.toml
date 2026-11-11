@@ -1,0 +1,35 @@
+# Razer Lancehead Tournament Edition (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerLanceheadTE`.
+
+name = "Razer Lancehead Tournament Edition"
+usb_pid = "0x0060"
+device_type = "mouse"
+transaction_id = "0x3f"
+wait_us = 600
+dpi_min = 100
+dpi_max = 16000
+matrix_dims = [1, 16]
+lighting_effects = ["static", "breathing", "spectrum", "wave", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = true
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "logo"
+id = 0x04
+
+[[led_regions]]
+name = "scroll"
+id = 0x01
+
+[[led_regions]]
+name = "left"
+id = 0x11
+
+[[led_regions]]
+name = "right"
+id = 0x10

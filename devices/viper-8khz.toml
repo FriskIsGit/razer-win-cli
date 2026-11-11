@@ -1,0 +1,22 @@
+# Razer Viper 8KHz (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerViper8KHz`.
+
+name = "Razer Viper 8KHz"
+usb_pid = "0x0091"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 20000
+lighting_effects = ["static", "breathing", "spectrum", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = true
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "logo"
+id = 0x04

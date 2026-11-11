@@ -1,0 +1,26 @@
+# Razer Naga Epic Chroma (Wired)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerNagaEpicChromaWired`.
+
+name = "Razer Naga Epic Chroma (Wired)"
+usb_pid = "0x003E"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 8200
+lighting_effects = ["static", "breathing", "spectrum", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = false
+polling_rate = true
+battery = true
+
+[[led_regions]]
+name = "scroll"
+id = 0x01
+
+[[led_regions]]
+name = "backlight"
+id = 0x05

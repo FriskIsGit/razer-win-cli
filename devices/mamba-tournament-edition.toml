@@ -1,0 +1,23 @@
+# Razer Mamba Tournament Edition (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerMambaTE`.
+
+name = "Razer Mamba Tournament Edition"
+usb_pid = "0x0046"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 16000
+matrix_dims = [1, 16]
+lighting_effects = ["static", "breathing", "spectrum", "wave", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = false
+polling_rate = false
+battery = false
+
+[[led_regions]]
+name = "backlight"
+id = 0x05

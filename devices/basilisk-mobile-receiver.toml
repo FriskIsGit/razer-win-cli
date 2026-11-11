@@ -1,0 +1,22 @@
+# Razer Basilisk Mobile (Receiver)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerBasiliskMobileReceiver`.
+
+name = "Razer Basilisk Mobile (Receiver)"
+usb_pid = "0x00D4"
+device_type = "mouse"
+transaction_id = "0x1f"
+wait_us = 31000
+dpi_min = 100
+dpi_max = 18000
+lighting_effects = ["static", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = true
+polling_rate = true
+battery = true
+
+[[led_regions]]
+name = "matrix"
+id = 0x00

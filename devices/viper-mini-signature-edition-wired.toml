@@ -1,0 +1,23 @@
+# Razer Viper Mini Signature Edition (Wired)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerViperMiniSEWired`.
+# TODO: lighting optimistically assumed (no OpenRazer data); needs real-world testing.
+
+name = "Razer Viper Mini Signature Edition (Wired)"
+usb_pid = "0x009E"
+device_type = "mouse"
+transaction_id = "0x1f"
+wait_us = 59900
+dpi_min = 100
+dpi_max = 30000
+lighting_effects = ["static", "breathing", "spectrum", "wave", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = true
+polling_rate = true
+battery = true
+
+[[led_regions]]
+name = "matrix"
+id = 0x00

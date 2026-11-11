@@ -1,0 +1,23 @@
+# Razer DeathAdder V2 Lite (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerDeathAdderV2Lite`.
+
+name = "Razer DeathAdder V2 Lite"
+usb_pid = "0x00A1"
+device_type = "mouse"
+transaction_id = "0x1f"
+wait_us = 600
+dpi_min = 100
+dpi_max = 8500
+matrix_dims = [1, 1]
+lighting_effects = ["static", "breathing", "spectrum", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = true
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "logo"
+id = 0x04

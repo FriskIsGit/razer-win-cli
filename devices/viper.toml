@@ -1,0 +1,23 @@
+# Razer Viper (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerViper`.
+
+name = "Razer Viper"
+usb_pid = "0x0078"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 16000
+matrix_dims = [1, 1]
+lighting_effects = ["static", "breathing", "spectrum", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = true
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "logo"
+id = 0x04

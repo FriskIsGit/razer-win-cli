@@ -1,0 +1,20 @@
+# Razer Abyssus 2014 (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerAbyssus`.
+
+name = "Razer Abyssus 2014"
+usb_pid = "0x0042"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+lighting_effects = ["none"]
+
+[capabilities]
+lighting = true
+dpi = false
+dpi_stages = false
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "logo"
+id = 0x04

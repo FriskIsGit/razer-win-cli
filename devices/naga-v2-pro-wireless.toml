@@ -1,0 +1,23 @@
+# Razer Naga V2 Pro (Wireless)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerNagaV2ProWireless`.
+
+name = "Razer Naga V2 Pro (Wireless)"
+usb_pid = "0x00A8"
+device_type = "mouse"
+transaction_id = "0x1f"
+wait_us = 31000
+dpi_min = 100
+dpi_max = 30000
+matrix_dims = [1, 3]
+lighting_effects = ["static", "breathing", "spectrum", "wave", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = true
+polling_rate = true
+battery = true
+
+[[led_regions]]
+name = "logo"
+id = 0x04

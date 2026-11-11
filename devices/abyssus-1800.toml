@@ -1,0 +1,22 @@
+# Razer Abyssus 1800 (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerAbyssus1800`.
+
+name = "Razer Abyssus 1800"
+usb_pid = "0x0020"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 1800
+lighting_effects = ["none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = false
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "logo"
+id = 0x04

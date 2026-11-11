@@ -1,6 +1,7 @@
 mod tui;
 mod cmd;
 mod inputs;
+mod device_list;
 
 use std::env;
 use std::fmt::{Debug};
@@ -69,17 +70,9 @@ impl Default for Profile {
 // =========================================================================
 
 // Device TOMLs are embedded at compile time so the binary is fully self-contained.
-const DEVICE_SOURCES: &[&str] = &[
-    include_str!("../devices/basilisk-v3.toml"),
-    include_str!("../devices/blackwidow-v3.toml"),
-    include_str!("../devices/deathadder-elite.toml"),
-    include_str!("../devices/deathadder-v2-mini.toml"),
-    include_str!("../devices/deathadder-v2.toml"),
-];
-
 fn load_registry() -> Registry {
     let mut registry = Registry::new();
-    for src in DEVICE_SOURCES {
+    for src in device_list::DEVICE_SOURCES {
         match Registry::parse_def(src) {
             Ok(def) => registry.push(def),
             Err(e) => eprintln!("warning: embedded device definition failed to parse: {e}"),
@@ -346,7 +339,7 @@ fn main() -> ExitCode {
 }
 
 fn version() -> &'static str {
-    "v0.3-DEV"
+    "v0.4-DEV"
 }
 
 // =========================================================================

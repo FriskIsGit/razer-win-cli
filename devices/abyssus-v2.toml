@@ -1,0 +1,26 @@
+# Razer Abyssus V2 (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerAbyssusV2`.
+
+name = "Razer Abyssus V2"
+usb_pid = "0x005B"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 5000
+lighting_effects = ["static", "breathing", "spectrum", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = false
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "logo"
+id = 0x04
+
+[[led_regions]]
+name = "scroll"
+id = 0x01

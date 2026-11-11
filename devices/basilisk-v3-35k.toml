@@ -1,0 +1,27 @@
+# Razer Basilisk V3 35K (wired mouse)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerBasiliskV3_35K`.
+
+name = "Razer Basilisk V3 35K"
+usb_pid = "0x00CB"
+device_type = "mouse"
+transaction_id = "0x1f"
+wait_us = 600
+dpi_min = 100
+dpi_max = 35000
+matrix_dims = [1, 13]
+lighting_effects = ["static", "spectrum", "wave", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = true
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "logo"
+id = 0x04
+
+[[led_regions]]
+name = "scroll"
+id = 0x01

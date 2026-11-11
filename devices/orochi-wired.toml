@@ -1,0 +1,22 @@
+# Razer Orochi (Wired)
+# source: OpenRazer driver razer_mouse_probe; daemon mouse.py class `RazerOrochiWired`.
+
+name = "Razer Orochi (Wired)"
+usb_pid = "0x0048"
+device_type = "mouse"
+transaction_id = "0xff"
+wait_us = 600
+dpi_min = 100
+dpi_max = 8200
+lighting_effects = ["static", "breathing", "spectrum", "reactive", "none"]
+
+[capabilities]
+lighting = true
+dpi = true
+dpi_stages = false
+polling_rate = true
+battery = false
+
+[[led_regions]]
+name = "scroll"
+id = 0x01
